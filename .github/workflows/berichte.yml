@@ -63,7 +63,7 @@ jobs:
         run: python gapup_bericht.py --jetzt
 
   earnings_vorboerse:
-    if: github.event_name == 'workflow_run'
+    if: false && github.event_name == 'workflow_run'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
