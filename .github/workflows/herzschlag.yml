@@ -1,0 +1,26 @@
+name: Herzschlag
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: herzschlag
+  cancel-in-progress: false
+
+jobs:
+  senden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+      - name: System laeuft
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python herzschlag.py --senden
