@@ -1,0 +1,106 @@
+name: Innovationsmodell (Sammler und Noten)
+run-name: Innovationsmodell
+
+# Dokument 05 (Innovations-Bewertungsmodell): taeglich nach dem Bau der
+# Scanner-Daten die Gratis-Sammler (Wikipedia, Apple-Ranglisten, FINRA) und
+# die drei Noten. Abgeschottet: schreibt nur nach innovation/ im privaten
+# Datenrepo, beruehrt kein laufendes System, sendet keine Meldung. Das
+# Protokoll nennt keine Kuerzel.
+on:
+  workflow_run:
+    workflows: ["Scanner-Daten bauen"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      modus:
+        description: "taeglich oder nachladen (Wikipedia ab 2015 fuer noch nicht nachgeladene Firmen)"
+        required: false
+        default: "taeglich"
+      hoechstens:
+        description: "Hoechstens so viele Firmen beim Nachladen (leer heisst 1500)"
+        required: false
+        default: ""
+
+concurrency:
+  group: innovation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  lauf:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Eingaben pruefen
+        env:
+          MODUS: ${{ inputs.modus || 'taeglich' }}
+          HOECHSTENS: ${{ inputs.hoechstens }}
+        run: |
+          case "$MODUS" in taeglich|nachladen) ;; *) echo "::error::Unbekannter Modus."; exit 1;; esac
+          if [ -n "$HOECHSTENS" ] && ! printf '%s' "$HOECHSTENS" | grep -Eq '^[0-9]{1,5}$'; then
+            echo "::error::hoechstens muss eine Zahl sein."; exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .daten
+          sparse-checkout: |
+            innovation
+            konsens
+            blacklist
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        run: pip install -q requests pandas pyarrow
+
+      - name: Scanner-Tabelle holen
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --clobber > /dev/null 2>&1 \
+            && echo "Nachttabelle geholt." || { echo "::error::Keine Nachttabelle."; exit 1; }
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_analysten.parquet --clobber > /dev/null 2>&1 \
+            && echo "Analystenwerte geholt." || echo "Keine Analystenwerte."
+
+      - name: Sammler und Noten
+        env:
+          MODUS: ${{ inputs.modus || 'taeglich' }}
+        run: python -m innovation.lauf --daten .daten --modus "$MODUS"
+
+      - name: Wikipedia ab 2015 nachladen (fehlende Firmen, in Portionen)
+        if: (inputs.modus || 'taeglich') == 'taeglich'
+        env:
+          HOECHSTENS: ${{ inputs.hoechstens || '1500' }}
+        run: python -m innovation.lauf --daten .daten --modus nachladen --hoechstens "$HOECHSTENS"
+
+      - name: Ablegen
+        run: |
+          cd .daten
+          git config user.name "veritas-innovation"
+          git config user.email "actions@users.noreply.github.com"
+          cp -r innovation "$RUNNER_TEMP/innovation"
+          for versuch in 1 2 3; do
+            git add -A -- innovation
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
+            git commit -q -m "Innovationsmodell: Sammler und Noten"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
+            git fetch --quiet --depth=1 origin main
+            git reset --hard --quiet FETCH_HEAD
+            rm -rf innovation && cp -r "$RUNNER_TEMP/innovation" innovation
+          done
