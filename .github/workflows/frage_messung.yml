@@ -43,6 +43,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Eingaben im Protokoll verbergen
+        # Die Eingabe kommt aus der Ereignisdatei, nicht aus env, damit sie nicht
+        # vor dem Verbergen im Kopf des Schritts steht.
+        run: |
+          EINGABE=$(jq -r '.inputs.ticker // ""' "$GITHUB_EVENT_PATH")
+          for t in $(printf '%s' "$EINGABE" | tr ',; ' '\n\n\n'); do [ -n "$t" ] && echo "::add-mask::$t"; done
+          echo "VERITAS_MASKE_EXTRA=$(printf '%s' "$EINGABE" | tr '; ' ',,')" >> "$GITHUB_ENV"
       - name: Secrets pruefen
         id: secrets
         env:
@@ -81,7 +88,13 @@ jobs:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: python frage_messung.py --daten daten --ticker "${{ inputs.ticker }}" --frage "${{ inputs.frage }}" --modelle "${{ inputs.modelle }}" --quartale "${{ inputs.quartale }}" --websuche "${{ inputs.websuche }}" --probe "${{ inputs.probe }}"
+          TICKER: ${{ inputs.ticker }}
+          FRAGE: ${{ inputs.frage }}
+          MODELLE: ${{ inputs.modelle }}
+          QUARTALE: ${{ inputs.quartale }}
+          WEBSUCHE: ${{ inputs.websuche }}
+          PROBE: ${{ inputs.probe }}
+        run: python frage_messung.py --daten daten --ticker "$TICKER" --frage "$FRAGE" --modelle "$MODELLE" --quartale "$QUARTALE" --websuche "$WEBSUCHE" --probe "$PROBE"
       - name: Ins Datenrepo
         if: always() && steps.secrets.outputs.da == 'ja'
         run: |
@@ -93,7 +106,7 @@ jobs:
             echo "Nichts Neues."
             exit 0
           fi
-          git commit -q -m "Messung KI-Abfrage ${{ inputs.ticker }} $(date -u +%Y-%m-%d_%H%MZ)"
+          git commit -q -m "Messung KI-Abfrage $(date -u +%Y-%m-%d_%H%MZ)"
           for versuch in 1 2 3; do
             if git push --quiet origin main; then
               echo "Gesichert."

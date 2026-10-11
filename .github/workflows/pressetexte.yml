@@ -39,6 +39,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 330
     steps:
+      - name: Eingaben im Protokoll verbergen
+        # Die Eingabe kommt aus der Ereignisdatei, nicht aus env, damit sie nicht
+        # vor dem Verbergen im Kopf des Schritts steht.
+        run: |
+          EINGABE=$(jq -r '.inputs.ticker // ""' "$GITHUB_EVENT_PATH")
+          for t in $(printf '%s' "$EINGABE" | tr ',; ' '\n\n\n'); do [ -n "$t" ] && echo "::add-mask::$t"; done
+          echo "VERITAS_MASKE_EXTRA=$(printf '%s' "$EINGABE" | tr '; ' ',,')" >> "$GITHUB_ENV"
       - name: Secrets pruefen
         id: secrets
         env:
@@ -73,7 +80,12 @@ jobs:
         if: steps.secrets.outputs.da == 'ja'
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
-        run: python pressetexte.py --daten daten --hoechstens "${{ inputs.hoechstens }}" --ticker "${{ inputs.ticker }}" --quartale "${{ inputs.quartale }}" --modus "${{ inputs.modus }}" --frisch "${{ inputs.frisch }}"
+          HOECHSTENS: ${{ inputs.hoechstens }}
+          TICKER: ${{ inputs.ticker }}
+          QUARTALE: ${{ inputs.quartale }}
+          MODUS: ${{ inputs.modus }}
+          FRISCH: ${{ inputs.frisch }}
+        run: python pressetexte.py --daten daten --hoechstens "$HOECHSTENS" --ticker "$TICKER" --quartale "$QUARTALE" --modus "$MODUS" --frisch "$FRISCH"
       - name: Ins Datenrepo
         if: always() && steps.secrets.outputs.da == 'ja'
         run: |

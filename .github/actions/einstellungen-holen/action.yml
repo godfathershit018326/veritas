@@ -17,11 +17,17 @@ runs:
         repository: ${{ inputs.repository }}
         token: ${{ inputs.token }}
         path: .daten
-        sparse-checkout: einstellungen
+        sparse-checkout: |
+          einstellungen
+          blacklist
     - shell: bash
       env:
         TOKEN_DA: ${{ inputs.token != '' }}
       run: |
+        # Schutz der oeffentlichen Protokolle: Python ersetzt die Kuerzel der
+        # Listen, Positionen und der Blacklist in jeder Ausgabe durch Punkte
+        # (.github/maske/sitecustomize.py).
+        echo "PYTHONPATH=$GITHUB_WORKSPACE/.github/maske${PYTHONPATH:+:$PYTHONPATH}" >> "$GITHUB_ENV"
         if [ "$TOKEN_DA" != "true" ]; then
           echo "Secret DATEN_TOKEN fehlt; Listen und Einstellungen aus dem Datenrepo fehlen."
           exit 0
