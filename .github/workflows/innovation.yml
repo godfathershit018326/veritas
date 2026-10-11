@@ -62,14 +62,34 @@ jobs:
             konsens
             blacklist
 
+      - name: Neue Scanner-Tabelle?
+        id: neu
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          ANLASS: ${{ github.event_name }}
+        run: |
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_stand.json --clobber > /dev/null 2>&1 || true
+          bau=$(python3 -c "import json;print(json.load(open('scanner_stand.json')).get('gebaut_am',''))" 2>/dev/null || echo "")
+          alt=$(cat .daten/innovation/letzter_bau.txt 2>/dev/null || echo "")
+          echo "bau=$bau" >> "$GITHUB_OUTPUT"
+          if [ "$ANLASS" = "workflow_run" ] && [ -n "$bau" ] && [ "$bau" = "$alt" ]; then
+            echo "Die Scanner-Tabelle ist seit dem letzten Lauf unverändert; kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-python@v5
+        if: steps.neu.outputs.los == 'ja'
         with:
           python-version: "3.11"
 
       - name: Abhaengigkeiten
+        if: steps.neu.outputs.los == 'ja'
         run: pip install -q requests pandas pyarrow
 
       - name: Scanner-Tabelle holen
+        if: steps.neu.outputs.los == 'ja'
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
         run: |
@@ -79,17 +99,25 @@ jobs:
             && echo "Analystenwerte geholt." || echo "Keine Analystenwerte."
 
       - name: Sammler und Noten
+        if: steps.neu.outputs.los == 'ja'
         env:
           MODUS: ${{ inputs.modus || 'taeglich' }}
         run: python -m innovation.lauf --daten .daten --modus "$MODUS"
 
       - name: Wikipedia ab 2015 nachladen (fehlende Firmen, in Portionen)
-        if: (inputs.modus || 'taeglich') == 'taeglich'
+        if: steps.neu.outputs.los == 'ja' && (inputs.modus || 'taeglich') == 'taeglich'
         env:
           HOECHSTENS: ${{ inputs.hoechstens || '1500' }}
         run: python -m innovation.lauf --daten .daten --modus nachladen --hoechstens "$HOECHSTENS"
 
+      - name: Stand merken
+        if: steps.neu.outputs.los == 'ja' && steps.neu.outputs.bau != ''
+        env:
+          BAU: ${{ steps.neu.outputs.bau }}
+        run: mkdir -p .daten/innovation && printf '%s' "$BAU" > .daten/innovation/letzter_bau.txt
+
       - name: Ablegen
+        if: steps.neu.outputs.los == 'ja'
         run: |
           cd .daten
           git config user.name "veritas-innovation"

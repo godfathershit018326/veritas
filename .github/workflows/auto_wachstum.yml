@@ -56,17 +56,35 @@ jobs:
             auto_wachstum
             blacklist
 
-      - uses: actions/setup-python@v5
+      - name: Neue Scanner-Tabelle?
+        id: neu
         if: steps.fenster.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          ANLASS: ${{ github.event_name }}
+        run: |
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_stand.json --clobber > /dev/null 2>&1 || true
+          bau=$(python3 -c "import json;print(json.load(open('scanner_stand.json')).get('gebaut_am',''))" 2>/dev/null || echo "")
+          alt=$(cat .daten/auto_wachstum/letzter_bau.txt 2>/dev/null || echo "")
+          echo "bau=$bau" >> "$GITHUB_OUTPUT"
+          if [ "$ANLASS" = "workflow_run" ] && [ -n "$bau" ] && [ "$bau" = "$alt" ]; then
+            echo "Die Scanner-Tabelle ist seit dem letzten Lauf unverändert; kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
         with:
           python-version: "3.11"
 
       - name: Abhaengigkeiten
-        if: steps.fenster.outputs.los == 'ja'
+        if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
         run: pip install -q requests pandas pyarrow
 
       - name: Daten holen
-        if: steps.fenster.outputs.los == 'ja'
+        if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
         run: |
@@ -89,13 +107,19 @@ jobs:
           fi
 
       - name: Auto-Liste bestimmen
-        if: steps.fenster.outputs.los == 'ja'
+        if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python auto_wachstum.py --daten .daten --tabelle scanner_tabelle.parquet --analysten scanner_analysten.parquet --kurse scanner_kurse_3j.parquet --fundament fundament
 
+      - name: Stand merken
+        if: steps.neu.outputs.los == 'ja' && steps.neu.outputs.bau != ''
+        env:
+          BAU: ${{ steps.neu.outputs.bau }}
+        run: mkdir -p .daten/auto_wachstum && printf '%s' "$BAU" > .daten/auto_wachstum/letzter_bau.txt
+
       - name: Ablegen
-        if: steps.fenster.outputs.los == 'ja'
+        if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
         run: |
           cd .daten
           git config user.name "veritas-auto-wachstum"
