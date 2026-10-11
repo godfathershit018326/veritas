@@ -17,7 +17,7 @@ on:
         required: false
         default: "taeglich"
       hoechstens:
-        description: "Hoechstens so viele Firmen beim Nachladen (leer heisst 1500)"
+        description: "Hoechstens so viele Firmen beim Nachladen (leer heisst nach Einstellung)"
         required: false
         default: ""
 
@@ -102,13 +102,15 @@ jobs:
         if: steps.neu.outputs.los == 'ja'
         env:
           MODUS: ${{ inputs.modus || 'taeglich' }}
+          WIKIMEDIA_TOKEN: ${{ secrets.WIKIMEDIA_TOKEN }}
         run: python -m innovation.lauf --daten .daten --modus "$MODUS"
 
       - name: Wikipedia ab 2015 nachladen (fehlende Firmen, in Portionen)
         if: steps.neu.outputs.los == 'ja' && (inputs.modus || 'taeglich') == 'taeglich'
         env:
-          HOECHSTENS: ${{ inputs.hoechstens || '1500' }}
-        run: python -m innovation.lauf --daten .daten --modus nachladen --hoechstens "$HOECHSTENS"
+          HOECHSTENS: ${{ inputs.hoechstens }}
+          WIKIMEDIA_TOKEN: ${{ secrets.WIKIMEDIA_TOKEN }}
+        run: python -m innovation.lauf --daten .daten --modus nachladen ${HOECHSTENS:+--hoechstens "$HOECHSTENS"}
 
       - name: Stand merken
         if: steps.neu.outputs.los == 'ja' && steps.neu.outputs.bau != ''
