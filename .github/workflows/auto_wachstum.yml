@@ -1,0 +1,112 @@
+name: Auto-Wachstum (Auto-Liste)
+run-name: Auto-Wachstum
+
+# Dokument 03, Teil A0/A0b/A0c: nach dem Bau der Scanner-Daten (jeden
+# Handelstag nach Boersenschluss und beim Neubau am Samstag) die Auto-Liste
+# "Auto-Wachstum" neu bestimmen. Abgeschottet: schreibt nur nach
+# auto_wachstum/ im privaten Datenrepo; der Waechter liest die Liste erst nach
+# Gerhards Freigabe. Keine Meldung. Das Protokoll nennt keine Kuerzel.
+on:
+  workflow_run:
+    workflows: ["Scanner-Daten bauen"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: auto-wachstum
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  lauf:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Zeitfenster pruefen
+        id: fenster
+        run: |
+          zeit=$(TZ=Europe/Vienna date +%H%M)
+          if (( 10#$zeit >= 1530 && 10#$zeit < 2200 )) && [ "$(TZ=America/New_York date +%u)" -le 5 ]; then
+            echo "::notice::Handelszeit in New York: kein Lauf, damit nichts das laufende System belastet."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.fenster.outputs.los == 'ja'
+      - uses: ./.github/actions/entsperren
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - uses: actions/checkout@v4
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .daten
+          sparse-checkout: |
+            auto_wachstum
+            blacklist
+
+      - uses: actions/setup-python@v5
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        if: steps.fenster.outputs.los == 'ja'
+        run: pip install -q requests pandas pyarrow
+
+      - name: Daten holen
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          for d in scanner_tabelle.parquet scanner_analysten.parquet scanner_kurse_3j.parquet; do
+            gh release download scanner-daten --repo "$DATEN_REPO" --pattern "$d" --clobber > /dev/null 2>&1 \
+              && echo "$d geholt." || echo "$d fehlt."
+          done
+          tag=$(gh release list --repo "$DATEN_REPO" --limit 100 --json tagName,createdAt,isDraft \
+            --jq '[.[] | select(.tagName | startswith("fundament-roh-")) | select(.isDraft | not)] | sort_by(.createdAt) | last | .tagName // ""')
+          mkdir -p fundament
+          if [ -n "$tag" ]; then
+            jahr=$(date -u +%Y)
+            for j in $(seq $((jahr - 5)) "$jahr"); do
+              gh release download "$tag" --repo "$DATEN_REPO" --pattern "fundament_kennzahlen_${j}.parquet" --dir fundament --clobber > /dev/null 2>&1 || true
+            done
+            gh release download "$tag" --repo "$DATEN_REPO" --pattern fundament_firmen.csv --dir fundament --clobber > /dev/null 2>&1 || true
+            echo "Fundament: $(ls fundament | wc -l) Dateien."
+          else
+            echo "Kein Fundament-Release."
+          fi
+
+      - name: Auto-Liste bestimmen
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python auto_wachstum.py --daten .daten --tabelle scanner_tabelle.parquet --analysten scanner_analysten.parquet --kurse scanner_kurse_3j.parquet --fundament fundament
+
+      - name: Ablegen
+        if: steps.fenster.outputs.los == 'ja'
+        run: |
+          cd .daten
+          git config user.name "veritas-auto-wachstum"
+          git config user.email "actions@users.noreply.github.com"
+          cp -r auto_wachstum "$RUNNER_TEMP/auto_wachstum"
+          for versuch in 1 2 3; do
+            git add -A -- auto_wachstum
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
+            git commit -q -m "Auto-Wachstum: Liste und Vorraum"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
+            git fetch --quiet --depth=1 origin main
+            git reset --hard --quiet FETCH_HEAD
+            rm -rf auto_wachstum && cp -r "$RUNNER_TEMP/auto_wachstum" auto_wachstum
+          done
