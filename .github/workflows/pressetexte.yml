@@ -1,0 +1,97 @@
+name: Pressetexte (Archiv der Ergebnis-Pressemitteilungen)
+
+on:
+  workflow_dispatch:
+    inputs:
+      hoechstens:
+        description: "hoechstens so viele Firmen in diesem Lauf (0 = alle)"
+        required: false
+        default: "1200"
+      ticker:
+        description: "nur diese Ticker, mit Beistrich getrennt (leer = alle Firmen mit Konsens)"
+        required: false
+        default: ""
+      quartale:
+        description: "je Firma die juengsten so vielen Ergebnis-8-Ks"
+        required: false
+        default: "8"
+      modus:
+        description: "archiv (8-K), 6k (Ergebnismitteilungen auslaendischer Emittenten ueber die SEC-Volltextsuche), probe6k oder probe8k (nur anzeigen, mit ticker)"
+        required: false
+        default: "archiv"
+      frisch:
+        description: "6k: Firmen mit Stand juenger als so viele Tage ueberspringen (0 = alle neu)"
+        required: false
+        default: "20"
+
+concurrency:
+  group: pressetexte
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  archiv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Secrets pruefen
+        id: secrets
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: |
+          da=ja
+          if [ -z "$DATEN_TOKEN" ]; then echo "Secret DATEN_TOKEN fehlt."; da=nein; fi
+          if [ -z "$SEC_USER_AGENT" ]; then echo "Secret SEC_USER_AGENT fehlt."; da=nein; fi
+          echo "da=$da" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.da == 'ja'
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: daten
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Abhaengigkeiten
+        run: pip install beautifulsoup4 lxml pandas
+      - name: Selbsttest
+        run: python pressetexte.py --selbsttest
+      - name: Archiv
+        if: steps.secrets.outputs.da == 'ja'
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python pressetexte.py --daten daten --hoechstens "${{ inputs.hoechstens }}" --ticker "${{ inputs.ticker }}" --quartale "${{ inputs.quartale }}" --modus "${{ inputs.modus }}" --frisch "${{ inputs.frisch }}"
+      - name: Ins Datenrepo
+        if: always() && steps.secrets.outputs.da == 'ja'
+        run: |
+          cd daten
+          git config user.name "veritas-pressetexte"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nichts Neues."
+            exit 0
+          fi
+          git commit -q -m "Pressetexte $(date -u +%Y-%m-%d_%H%MZ)"
+          for versuch in 1 2 3; do
+            if git push --quiet origin main; then
+              echo "Gesichert."
+              exit 0
+            fi
+            git pull --rebase --quiet -X theirs origin main || { git rebase --abort 2>/dev/null; git pull --rebase --quiet -X theirs origin main || true; }
+          done
+          echo "Push nach drei Anlaeufen gescheitert."
+          exit 1

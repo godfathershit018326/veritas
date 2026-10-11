@@ -1,0 +1,38 @@
+name: Wächter-Hüter (alle 6 Min)
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: waechter-hueter
+  cancel-in-progress: false
+
+jobs:
+  hueten:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - name: Läuft oder wartet eine Wache?
+        id: pruefung
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+        run: python3 waechter_noetig.py
+
+      - name: Wache starten
+        if: steps.pruefung.outputs.noetig == 'ja'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run watcher.yml \
+            --repo "${{ github.repository }}" \
+            -f dauerwache="${{ steps.pruefung.outputs.dauerwache }}"
+          echo "Wache angestoßen mit ${{ steps.pruefung.outputs.dauerwache }} Minuten."

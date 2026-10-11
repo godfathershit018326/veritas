@@ -1,0 +1,53 @@
+name: Insider-Kauf-Scanner (SEC Form 4)
+
+on:
+  workflow_dispatch:
+    inputs:
+      datum:
+        description: "Handelstag (JJJJ-MM-TT), leer = heute"
+        required: false
+        default: ""
+  schedule:
+    - cron: "40 12 * * 1-5"
+    - cron: "40 20 * * 1-5"
+
+concurrency:
+  group: insider-scanner
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhängigkeiten
+        run: pip install requests yfinance pandas
+
+      - name: Insider-Käufe holen und bewerten
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python insider_edgar.py --scan ${{ github.event.inputs.datum }}
+
+      - name: Ergebnis sichern
+        run: |
+          git config user.name "insider-scanner"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A -- insider_kaeufe.json insider_funde.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "Nichts Neues."
+          else
+            git commit -m "Insider-Käufe: Stand aktualisiert"
+            git pull --rebase --autostash origin main || true
+            git push origin main || echo "Push fehlgeschlagen, nächster Lauf holt es nach."
+          fi

@@ -1,0 +1,134 @@
+name: Fundament Phase 1
+
+on:
+  schedule:
+    - cron: "37 20-23 * * 1-5"
+    - cron: "37 0-3 * * 2-6"
+  workflow_dispatch:
+    inputs:
+      modus:
+        description: "probe (Referenzfirmen validieren) oder voll (Gesamtarchiv)"
+        type: choice
+        options:
+          - probe
+          - voll
+        default: probe
+      hoechstens:
+        description: "Vollmodus: nur die ersten N Archivdateien (leer = alle)"
+        required: false
+        default: ""
+
+concurrency:
+  group: fundament-phase1
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      los: ${{ steps.faellig.outputs.los }}
+    steps:
+      - name: Faellig?
+        id: faellig
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          ANLASS: ${{ github.event_name }}
+        run: |
+          if [ "$ANLASS" != "schedule" ]; then
+            echo "Von Hand gestartet, laeuft immer."
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ny_tag=$(TZ=America/New_York date +%u)
+          ny_zeit=$(TZ=America/New_York date +%H%M)
+          ny_min=$((10#$ny_zeit))
+          if [ "$ny_tag" -le 5 ] && [ "$ny_min" -ge 900 ] && [ "$ny_min" -lt 1605 ]; then
+            echo "In New York ist es $ny_zeit an einem Werktag, dort wird gehandelt; kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          letzt=$(gh release list --repo "$DATEN_REPO" --limit 100 --json tagName,createdAt,isDraft \
+            --jq '[.[] | select(.tagName | startswith("fundament-roh-")) | select(.isDraft | not)] | sort_by(.createdAt) | last | .createdAt // ""')
+          if [ -n "$letzt" ]; then
+            alter=$(( $(date -u +%s) - $(date -u -d "$letzt" +%s) ))
+            if [ "$alter" -lt 28800 ]; then
+              echo "Das letzte Release entstand $letzt, vor weniger als acht Stunden; kein Lauf."
+              echo "los=nein" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "Letztes Release: ${letzt:-keines}; in New York $ny_zeit. Der Lauf beginnt."
+          echo "los=ja" >> "$GITHUB_OUTPUT"
+
+  lauf:
+    needs: pruefen
+    if: needs.pruefen.outputs.los == 'ja'
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      MODUS: ${{ inputs.modus || 'voll' }}
+      HOECHSTENS: ${{ inputs.hoechstens || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Abhaengigkeiten
+        run: pip install pyarrow pandas
+      - name: Selbsttest der Normalisierung
+        run: python fundament_normalisieren.py --selbsttest
+      - name: Lauf
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: |
+          if [ -n "$HOECHSTENS" ]; then
+            python fundament_lauf.py --modus "$MODUS" --hoechstens "$HOECHSTENS"
+          else
+            python fundament_lauf.py --modus "$MODUS"
+          fi
+      - name: Berichte als Artefakt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fundament-${{ env.MODUS }}-${{ github.run_id }}
+          path: |
+            fundament_ausgabe/*.md
+            fundament_ausgabe/*.json
+            fundament_ausgabe/*.csv
+          if-no-files-found: warn
+          retention-days: 1
+      - name: Release mit den Parquet-Bestaenden (nur voll)
+        if: env.MODUS == 'voll' && env.HOECHSTENS == ''
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          rm -f fundament_daten/companyfacts.zip
+          gh release list --repo "$DATEN_REPO" --limit 100 --json tagName,isDraft \
+            --jq '.[] | select(.tagName | startswith("fundament-roh-")) | select(.isDraft) | .tagName' |
+          while read -r entwurf; do
+            gh release delete "$entwurf" --repo "$DATEN_REPO" --yes && echo "Entwurf $entwurf entfernt."
+          done
+          tag="fundament-roh-$(date -u +%Y%m%d-%H%M)"
+          zweig="$(git rev-parse --abbrev-ref HEAD)"
+          gh release create "$tag" fundament_ausgabe/*.parquet fundament_ausgabe/fundament_firmen.csv fundament_ausgabe/abdeckung.md fundament_ausgabe/fundament_fehler.json \
+            --repo "$DATEN_REPO" \
+            --draft \
+            --title "Fundament Rohbestand $tag" \
+            --notes "Phase 1, Vollarchiv companyfacts der SEC, normalisiert (Kennzahlen je Jahr) samt Rohdaten aller Felder je Jahr. Erzeugt vom Lauf ${{ github.run_id }} (${{ github.event_name }}) auf Branch $zweig."
+          gh release edit "$tag" --repo "$DATEN_REPO" --draft=false --latest
+          echo "Release $tag veroeffentlicht."
+          gh release list --repo "$DATEN_REPO" --limit 100 --json tagName,isDraft,createdAt \
+            --jq '[.[] | select(.tagName | startswith("fundament-roh-")) | select(.isDraft | not)] | sort_by(.createdAt) | reverse | .[7:] | .[].tagName' |
+          while read -r alt; do
+            gh release delete "$alt" --repo "$DATEN_REPO" --cleanup-tag --yes && echo "Aelteres Release $alt entfernt."
+          done

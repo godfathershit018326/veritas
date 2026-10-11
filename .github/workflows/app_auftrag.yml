@@ -1,0 +1,102 @@
+name: App-Auftrag
+run-name: App-Auftrag
+
+on:
+  workflow_dispatch:
+    inputs:
+      nummer:
+        description: "Kennung des Auftrags"
+        required: true
+
+concurrency:
+  group: app-auftrag
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  auftrag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Kennung pruefen
+        env:
+          NUMMER: ${{ inputs.nummer }}
+        run: |
+          if ! printf '%s' "$NUMMER" | grep -Eq '^[A-Za-z0-9_-]{8,64}$'; then
+            echo "::error::Ungueltige Kennung."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .app_daten
+          sparse-checkout: |
+            app/auftraege
+            app/ergebnisse
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Abhaengigkeiten
+        run: pip install -q requests pandas numpy scipy openpyxl yfinance pyarrow
+
+      - name: Nachttabelle und Analystenwerte holen
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --clobber > /dev/null 2>&1 \
+            && echo "Nachttabelle geholt." || echo "Keine Nachttabelle."
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_analysten.parquet --clobber > /dev/null 2>&1 \
+            && echo "Analystenwerte geholt." || echo "Keine Analystenwerte."
+
+      - name: Auftrag rechnen
+        env:
+          NUMMER: ${{ inputs.nummer }}
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+        run: python app_auftrag.py "$NUMMER" --daten .app_daten
+
+      - name: Ergebnis ablegen
+        env:
+          NUMMER: ${{ inputs.nummer }}
+        run: |
+          cd .app_daten
+          git config user.name "veritas-app-auftrag"
+          git config user.email "actions@users.noreply.github.com"
+          cp "app/ergebnisse/$NUMMER.json" "$RUNNER_TEMP/ergebnis.json"
+          for versuch in 1 2 3; do
+            git add -A -- app/auftraege app/ergebnisse
+            if git diff --cached --quiet; then
+              echo "Nichts abzulegen."
+              break
+            fi
+            git commit -q -m "App-Auftrag"
+            if git push --quiet origin HEAD:main; then
+              echo "Ergebnis abgelegt (Versuch $versuch)."
+              break
+            fi
+            git fetch --quiet --depth=1 origin main
+            git reset --hard --quiet FETCH_HEAD
+            mkdir -p app/ergebnisse
+            cp "$RUNNER_TEMP/ergebnis.json" "app/ergebnisse/$NUMMER.json"
+            rm -f "app/auftraege/$NUMMER.json"
+          done

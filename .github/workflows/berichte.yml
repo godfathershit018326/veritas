@@ -1,0 +1,83 @@
+name: Berichte (Gap-Up vorbörslich)
+
+on:
+  workflow_run:
+    workflows: ["Pattern-Scanner (Kaufpunkte)"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      jetzt:
+        description: "Sofort bauen, auch ausserhalb des Zeitfensters (ja/nein)"
+        required: false
+        default: "nein"
+
+concurrency:
+  group: berichte
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  gapup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+      - name: Ist der Gap-Up-Bericht faellig?
+        id: pruefung
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          JETZT: ${{ github.event.inputs.jetzt }}
+        run: |
+          if [ "$JETZT" = "ja" ]; then
+            echo "Von Hand angestossen: wird jetzt gebaut."
+            echo "noetig=ja" >> "$GITHUB_OUTPUT"
+          else
+            python3 gapup_bericht.py --faellig
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.pruefung.outputs.noetig == 'ja'
+        with:
+          python-version: "3.11"
+      - name: Abhaengigkeiten
+        if: steps.pruefung.outputs.noetig == 'ja'
+        run: pip install requests pandas numpy pyarrow yfinance
+      - name: Selbsttests
+        if: steps.pruefung.outputs.noetig == 'ja'
+        run: |
+          python berichte.py --selbsttest
+          python gapup_bericht.py --selbsttest
+      - name: Gap-Up-Bericht bauen und ablegen
+        if: steps.pruefung.outputs.noetig == 'ja'
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: python gapup_bericht.py --jetzt
+
+  earnings_vorboerse:
+    if: github.event_name == 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Zusatzlauf der Vorabwerte vor der Eroeffnung
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          zeit=$(TZ=America/New_York date +%H%M)
+          tag=$(TZ=America/New_York date +%u)
+          if [ "$tag" -le 5 ] && (( 10#$zeit >= 915 && 10#$zeit <= 924 )); then
+            gh workflow run vorabwerte.yml --repo "$GITHUB_REPOSITORY" --ref main -f modus=strom
+            echo "Zusatzlauf angestossen, $zeit New York."
+          else
+            echo "Nicht faellig, $zeit New York."
+          fi

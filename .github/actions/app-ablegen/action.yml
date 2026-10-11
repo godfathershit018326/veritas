@@ -1,0 +1,51 @@
+name: App-Daten ablegen
+description: Legt die Ausgaben von app_export.py im Ordner app/ des privaten Datenrepos ab.
+inputs:
+  token:
+    description: Token mit Schreibzugriff auf das Datenrepo
+    required: true
+  repository:
+    description: Datenrepo
+    required: false
+    default: ${{ github.repository_owner }}/veritas-daten
+runs:
+  using: composite
+  steps:
+    - if: inputs.token != ''
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.repository }}
+        token: ${{ inputs.token }}
+        path: .app_daten
+        sparse-checkout: app
+    - shell: bash
+      env:
+        TOKEN_DA: ${{ inputs.token != '' }}
+      run: |
+        if [ "$TOKEN_DA" != "true" ]; then
+          echo "Secret DATEN_TOKEN fehlt; die App-Daten bleiben ungeschrieben."
+          exit 0
+        fi
+        if [ ! -d .app_ausgabe/app ]; then
+          echo "Keine App-Daten zum Ablegen."
+          exit 0
+        fi
+        hier="$PWD"
+        cd .app_daten
+        git config user.name "veritas-app-export"
+        git config user.email "actions@users.noreply.github.com"
+        for versuch in 1 2 3; do
+          python3 "$hier/app_export.py" --ablegen "$PWD" --ausgabe "$hier/.app_ausgabe"
+          git add -A -- app
+          if git diff --cached --quiet; then
+            echo "App-Daten unveraendert."
+            break
+          fi
+          git commit -q -m "App-Daten"
+          if git push --quiet origin HEAD:main; then
+            echo "App-Daten abgelegt (Versuch $versuch)."
+            break
+          fi
+          git fetch --quiet --depth=1 origin main
+          git reset --hard --quiet FETCH_HEAD
+        done

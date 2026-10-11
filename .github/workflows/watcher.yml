@@ -1,0 +1,96 @@
+name: Breakout-Wächter (Dauerwache, Prüftakt 2 s)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dauerwache:
+        description: "Minuten am Stück wachen (0 = einmal prüfen). 390 = ganzer Handelstag."
+        required: false
+        default: "0"
+
+concurrency:
+  group: breakout-watcher
+  cancel-in-progress: false
+
+jobs:
+  wachen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhängigkeiten
+        run: pip install requests pandas numpy scipy openpyxl "yfinance>=1.5"
+
+      - name: Kaufpunkte aus dem Repo übernehmen
+        run: cp kaufpunkte_aktuell.xlsx kaufpunkte.xlsx
+
+      - name: Zustand laden
+        uses: actions/cache@v4
+        with:
+          path: watcher_state.json
+          key: watcher-state-${{ github.run_id }}
+          restore-keys: watcher-state-
+
+      - name: Breakouts prüfen
+        env:
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          if [ ! -f kaufpunkte.xlsx ]; then
+            echo "Keine kaufpunkte.xlsx gefunden — erst den Scanner laufen lassen."
+            exit 0
+          fi
+          python breakout_watcher.py kaufpunkte.xlsx --alle --dauerwache "${{ github.event.inputs.dauerwache || '0' }}"
+
+      - name: ntfy-Verlauf sichern
+        if: always()
+        run: |
+          git config user.name "pattern-scanner"
+          git config user.email "actions@users.noreply.github.com"
+          SICHERUNG=/tmp/ntfy_meine.json
+          cp ntfy_ids.json "$SICHERUNG" 2>/dev/null || echo '[]' > "$SICHERUNG"
+          LOGBUCH=/tmp/trigger_meines.jsonl
+          cp trigger_logbuch.jsonl "$LOGBUCH" 2>/dev/null || : > "$LOGBUCH"
+          GRUEN=/tmp/gruen_meine.json
+          cp gruen_minuten.json "$GRUEN" 2>/dev/null || : > "$GRUEN"
+          SCHLUSSNAH=/tmp/schlussnah_meine.json
+          cp schlussnahe_gemeldet.json "$SCHLUSSNAH" 2>/dev/null || : > "$SCHLUSSNAH"
+          for versuch in 1 2 3; do
+            git fetch --quiet origin main
+            git reset --hard --quiet FETCH_HEAD
+            python ntfy_verlauf.py --vereinen "$SICHERUNG"
+            python trigger_logbuch.py --vereinen "$LOGBUCH" || true
+            git add -A -- ntfy_ids.json 2>/dev/null || true
+            git add -A -- trigger_logbuch.jsonl 2>/dev/null || true
+            git add -A -- melde_gedaechtnis.json 2>/dev/null || true
+            [ -s "$GRUEN" ] && cp "$GRUEN" gruen_minuten.json
+            [ -s "$SCHLUSSNAH" ] && cp "$SCHLUSSNAH" schlussnahe_gemeldet.json
+            git add -A -- gruen_minuten.json 2>/dev/null || true
+            git add -A -- schlussnahe_gemeldet.json 2>/dev/null || true
+            if git diff --cached --quiet; then
+              echo "Keine neuen Meldungen zu merken."
+              break
+            fi
+            git commit -q -m "ntfy-Verlauf und Trigger-Logbuch des Wächterlaufs"
+            if git push --quiet origin main; then
+              echo "ntfy-Kennungen gesichert."
+              break
+            fi
+            echo "Jemand war schneller (Versuch $versuch von 3) — noch einmal."
+          done

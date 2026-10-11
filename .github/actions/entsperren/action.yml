@@ -1,0 +1,26 @@
+name: Entsperren
+description: Installiert git-crypt und entsperrt den Checkout.
+inputs:
+  schluessel:
+    description: Schluessel als Base64
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        SCHLUESSEL: ${{ inputs.schluessel }}
+      run: |
+        if [ -z "$SCHLUESSEL" ]; then
+          echo "::error::Secret GIT_CRYPT_KEY fehlt; ohne Schluessel laeuft hier nichts."
+          exit 1
+        fi
+        if ! command -v git-crypt >/dev/null 2>&1; then
+          sudo apt-get install -y -qq git-crypt >/dev/null 2>&1 \
+            || { sudo apt-get update -qq >/dev/null && sudo apt-get install -y -qq git-crypt >/dev/null; }
+        fi
+        datei="$(mktemp)"
+        printf '%s' "$SCHLUESSEL" | base64 -d > "$datei"
+        git-crypt unlock "$datei"
+        rm -f "$datei"
+        echo "Entsperrt."

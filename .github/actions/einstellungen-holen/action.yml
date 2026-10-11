@@ -1,0 +1,34 @@
+name: Einstellungen holen
+description: Holt Listen und Einstellungen aus dem privaten Datenrepo in den Arbeitsordner.
+inputs:
+  token:
+    description: Token mit Lesezugriff auf das Datenrepo
+    required: true
+  repository:
+    description: Datenrepo
+    required: false
+    default: ${{ github.repository_owner }}/veritas-daten
+runs:
+  using: composite
+  steps:
+    - if: inputs.token != ''
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.repository }}
+        token: ${{ inputs.token }}
+        path: .daten
+        sparse-checkout: einstellungen
+    - shell: bash
+      env:
+        TOKEN_DA: ${{ inputs.token != '' }}
+      run: |
+        if [ "$TOKEN_DA" != "true" ]; then
+          echo "Secret DATEN_TOKEN fehlt; Listen und Einstellungen aus dem Datenrepo fehlen."
+          exit 0
+        fi
+        n=0
+        for f in .daten/einstellungen/*; do
+          if [ -f "$f" ]; then cp "$f" .; n=$((n+1)); fi
+        done
+        echo "Einstellungen geholt: $n Datei(en)."
+        echo "DATEN_EINSTELLUNGEN=$PWD/.daten" >> "$GITHUB_ENV"
