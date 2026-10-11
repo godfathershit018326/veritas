@@ -55,6 +55,7 @@ jobs:
           sparse-checkout: |
             auto_wachstum
             blacklist
+            einstellungen
 
       - name: Neue Scanner-Tabelle?
         id: neu
@@ -126,11 +127,12 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           cp -r auto_wachstum "$RUNNER_TEMP/auto_wachstum"
           for versuch in 1 2 3; do
-            git add -A -- auto_wachstum
+            git add -A -- auto_wachstum einstellungen/auto_wachstum.csv
             if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
             git commit -q -m "Auto-Wachstum: Liste und Vorraum"
             if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
             git fetch --quiet --depth=1 origin main
             git reset --hard --quiet FETCH_HEAD
             rm -rf auto_wachstum && cp -r "$RUNNER_TEMP/auto_wachstum" auto_wachstum
+            cp auto_wachstum/auto_wachstum.csv einstellungen/auto_wachstum.csv
           done
