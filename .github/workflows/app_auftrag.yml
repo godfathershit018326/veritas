@@ -33,9 +33,20 @@ jobs:
           fi
 
       - uses: actions/checkout@v4
+      # Schneller (Gerhard, 12.10.2026: "das dauert ja voll lange"): git-crypt
+      # aus dem Zwischenspeicher statt jedes Mal per apt (spart etwa 5 s).
+      - name: git-crypt aus dem Zwischenspeicher
+        id: gitcrypt
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/git-crypt
+          key: git-crypt-${{ runner.os }}-${{ runner.arch }}-v1
       - uses: ./.github/actions/entsperren
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - name: git-crypt fuer den naechsten Lauf merken
+        if: steps.gitcrypt.outputs.cache-hit != 'true'
+        run: mkdir -p ~/.local/bin && cp "$(command -v git-crypt)" ~/.local/bin/git-crypt
       - uses: ./.github/actions/einstellungen-holen
         with:
           token: ${{ secrets.DATEN_TOKEN }}
@@ -52,11 +63,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
-          cache-dependency-path: requirements.txt
+
+      # uv installiert dieselben Pakete aus seinem Zwischenspeicher in wenigen
+      # Sekunden statt 17 s mit pip.
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/workflows/app_auftrag.yml
 
       - name: Abhaengigkeiten
-        run: pip install -q requests pandas numpy scipy openpyxl yfinance pyarrow
+        run: uv pip install --system -q requests pandas numpy scipy openpyxl yfinance pyarrow
 
       - name: Nachttabelle und Analystenwerte holen
         continue-on-error: true
