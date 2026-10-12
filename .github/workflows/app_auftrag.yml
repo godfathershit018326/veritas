@@ -32,7 +32,6 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
       # Schneller (Gerhard, 12.10.2026: "das dauert ja voll lange"): git-crypt
       # aus dem Zwischenspeicher statt jedes Mal per apt (spart etwa 5 s).
       - name: git-crypt aus dem Zwischenspeicher
@@ -41,15 +40,16 @@ jobs:
         with:
           path: ~/.local/bin/git-crypt
           key: git-crypt-${{ runner.os }}-${{ runner.arch }}-v1
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/entsperren
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
-      - name: git-crypt fuer den naechsten Lauf merken
-        if: steps.gitcrypt.outputs.cache-hit != 'true'
-        run: mkdir -p ~/.local/bin && cp "$(command -v git-crypt)" ~/.local/bin/git-crypt
       - uses: ./.github/actions/einstellungen-holen
         with:
           token: ${{ secrets.DATEN_TOKEN }}
+      - name: git-crypt fuer den naechsten Lauf merken
+        if: steps.gitcrypt.outputs.cache-hit != 'true'
+        run: mkdir -p ~/.local/bin && cp "$(command -v git-crypt)" ~/.local/bin/git-crypt
 
       - uses: actions/checkout@v4
         with:
