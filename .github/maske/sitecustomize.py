@@ -2,7 +2,7 @@
 # 12.10.2026): Python laedt diese Datei beim Start, wenn ihr Ordner im
 # PYTHONPATH steht (das setzt die Aktion "Einstellungen holen"). Sie ersetzt
 # in allem, was ein Programm auf stdout und stderr schreibt, jedes Kuerzel
-# aus Gerhards Listen, Einzelaktien, Positionen, Alarm-Kaufpunkten und der
+# aus Gerhards Listen, der Auto-Liste, Einzelaktien, Positionen, Alarm-Kaufpunkten und der
 # Blacklist durch Punkte. Die Kuerzel liest sie zur Laufzeit aus den Dateien
 # im Arbeitsordner; in dieser Datei steht keines. Ein Fehler hier darf nie
 # ein Programm stoppen.
@@ -15,7 +15,8 @@ import sys
 
 def _kuerzel():
     menge = set()
-    for datei in ("finviz_3.csv", "darvas.csv", "dritte_liste.csv", "vierte_liste.csv", "einzelaktien.csv"):
+    for datei in ("finviz_3.csv", "darvas.csv", "dritte_liste.csv", "vierte_liste.csv", "einzelaktien.csv",
+                  "auto_wachstum.csv"):
         try:
             with open(datei, encoding="utf-8-sig") as f:
                 for z in csv.DictReader(f):
