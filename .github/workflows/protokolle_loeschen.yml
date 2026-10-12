@@ -45,6 +45,7 @@ jobs:
               schon=$((schon+1))
             else
               fehler=$((fehler+1))
+              echo "Nicht geloescht: Lauf $id, $(head -c 160 antwort.txt | tr -d '\n')"
             fi
           done < laeufe.txt
           echo "Laeufe vor dem Zeitpunkt: $gesamt; Protokolle geloescht: $weg; schon weg: $schon; nicht geloescht: $fehler"
