@@ -1,0 +1,99 @@
+name: Verkaufssignale (Verkaufen im Gewinn)
+run-name: Verkaufssignale
+
+# Dokument 04 (Verkaufen im Gewinn), Teil A und B als MELDUNGEN, ohne Bot
+# (Mathias, 13.10.2026). Laeuft nach dem Bau der Scanner-Daten, nur
+# ausserhalb 15:30 bis 22:00 Wien, liest positionen.json und
+# zahlen_termine.json aus diesem Repo und die Tageskurse des Releases,
+# schreibt nur verkauf/ im privaten Datenrepo und legt die Meldungen im
+# Reiter Berichte ab (Art verkauf). Waechter, Nachtscan, exit_regeln.py und
+# positionen.json bleiben unberuehrt. Das Protokoll nennt keine Kuerzel.
+on:
+  workflow_run:
+    workflows: ["Scanner-Daten bauen"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      trocken:
+        description: "Nur ausgeben, nichts ablegen (ja/nein)"
+        default: "nein"
+
+concurrency:
+  group: verkaufssignale
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  lauf:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Zeitfenster pruefen
+        id: fenster
+        run: |
+          zeit=$(TZ=Europe/Vienna date +%H%M)
+          if (( 10#$zeit >= 1530 && 10#$zeit < 2200 )) && [ "$(TZ=America/New_York date +%u)" -le 5 ]; then
+            echo "::notice::Handelszeit in New York: kein Lauf, damit nichts das laufende System belastet."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.fenster.outputs.los == 'ja'
+      - uses: ./.github/actions/entsperren
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - uses: actions/checkout@v4
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .daten
+          sparse-checkout: |
+            verkauf
+
+      - uses: actions/setup-python@v5
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        if: steps.fenster.outputs.los == 'ja'
+        run: pip install -q requests pandas pyarrow
+
+      - name: Tageskurse holen
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_kurse_3j.parquet --clobber > /dev/null 2>&1 && echo "Kurse geholt." || echo "Kurse fehlen."
+
+      - name: Verkaufssignale pruefen
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          TROCKEN: ${{ inputs.trocken }}
+        run: python verkaufssignale.py --daten .daten --kurse scanner_kurse_3j.parquet $([ "$TROCKEN" = "ja" ] && echo --trocken)
+
+      - name: Ablegen
+        if: steps.fenster.outputs.los == 'ja'
+        run: |
+          cd .daten
+          git config user.name "veritas-verkaufssignale"
+          git config user.email "actions@users.noreply.github.com"
+          for versuch in 1 2 3; do
+            git add -A -- verkauf
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
+            git commit -q -m "Verkaufssignale: Staffel und Stand"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
+            git fetch --quiet --depth=1 origin main
+            git rebase --quiet FETCH_HEAD || { git rebase --abort; git reset --soft FETCH_HEAD; }
+          done
