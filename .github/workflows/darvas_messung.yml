@@ -1,0 +1,104 @@
+name: Darvas-Messung (Box gegen 1977)
+run-name: Darvas-Messung
+
+# Dokument 04 (06.10.2026), Teil B 10: Darvas 1977 "als eigenes Muster nur im
+# Scanner, ohne Alarm und ohne Bot, und mitmessen. Scharf erst, wenn es besser
+# laeuft als unsere Darvas, und nur nach meiner Freigabe." Diese Messung
+# (darvas_messung.py) rechnet beide Fassungen ueber die Tageskurse der
+# letzten drei Jahre nach und legt den Bericht unter messungen/darvas/ im
+# privaten Datenrepo ab. Sie sendet nichts, setzt keine Alarme und schreibt
+# nichts, was Waechter, Nachtscan oder Mappe lesen. Das Protokoll nennt keine
+# Kuerzel. Laeuft nur ausserhalb 15:30 bis 22:00 Wien.
+on:
+  schedule:
+    - cron: "15 6 * * 6"      # Samstag 06:15 UTC, nach dem Freitagsbau der Scanner-Daten
+  workflow_dispatch:
+    inputs:
+      monate:
+        description: "Messzeitraum in Monaten"
+        default: "24"
+      trocken:
+        description: "Nur ausgeben, nichts ablegen (ja/nein)"
+        default: "nein"
+
+concurrency:
+  group: darvas-messung
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  messen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Zeitfenster pruefen
+        id: fenster
+        run: |
+          zeit=$(TZ=Europe/Vienna date +%H%M)
+          if (( 10#$zeit >= 1530 && 10#$zeit < 2200 )) && [ "$(TZ=America/New_York date +%u)" -le 5 ]; then
+            echo "::notice::Handelszeit in New York: kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.fenster.outputs.los == 'ja'
+      - uses: ./.github/actions/entsperren
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+
+      - uses: actions/checkout@v4
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .messung
+          sparse-checkout: |
+            messungen/darvas
+
+      - uses: actions/setup-python@v5
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        if: steps.fenster.outputs.los == 'ja'
+        run: pip install -q pandas numpy scipy pyarrow
+
+      - name: Tageskurse holen
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_kurse_3j.parquet --clobber > /dev/null 2>&1 && echo "Kurse geholt." || echo "Kurse fehlen."
+
+      - name: Messen
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          MONATE: ${{ inputs.monate }}
+        run: python darvas_messung.py --kurse scanner_kurse_3j.parquet --daten .messung --monate "${MONATE:-24}"
+
+      - name: Ablegen
+        if: steps.fenster.outputs.los == 'ja' && inputs.trocken != 'ja'
+        run: |
+          cd .messung
+          git config user.name "veritas-darvas-messung"
+          git config user.email "actions@users.noreply.github.com"
+          for versuch in 1 2 3; do
+            git add -A -- messungen/darvas
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
+            git commit -q -m "Darvas-Messung: Box gegen 1977"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
+            git fetch --quiet --depth=1 origin main
+            git rebase --quiet FETCH_HEAD || { git rebase --abort; git reset --soft FETCH_HEAD; }
+          done
