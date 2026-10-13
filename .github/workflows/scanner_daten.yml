@@ -185,6 +185,31 @@ jobs:
           fi
           gh release upload scanner-daten --repo "$DATEN_REPO" scanner_tabelle.parquet scanner_stand.json --clobber
 
+      - name: Episodic-Pivot-Kandidaten ins Datenrepo
+        # Die Aktien mit Zahlen und toter Phase fuer den naechsten Handelstag
+        # (episodic_pivot.py, Mathias 14.10.2026); der Waechter liest sie mit
+        # den Einstellungen. Eine leere Liste ist ein Stand und wird abgelegt.
+        if: steps.bau.outputs.veroeffentlichen == 'ja' && steps.token.outputs.da == 'ja'
+        run: |
+          if [ -z "$DATEN_EINSTELLUNGEN" ] || [ ! -f episodic_kandidaten.csv ]; then
+            echo "Keine Kandidatenliste oder kein Datenrepo; nichts abzulegen."
+            exit 0
+          fi
+          hier="$PWD"
+          cd "$DATEN_EINSTELLUNGEN"
+          git config user.name "veritas-scanner-daten"
+          git config user.email "actions@users.noreply.github.com"
+          for versuch in 1 2 3; do
+            cp "$hier/episodic_kandidaten.csv" einstellungen/episodic_kandidaten.csv
+            git add -A -- einstellungen/episodic_kandidaten.csv
+            if git diff --cached --quiet; then echo "Kandidatenliste unveraendert."; break; fi
+            git commit -q -m "Episodic Pivot: Kandidaten des naechsten Handelstags"
+            if git push --quiet origin HEAD:main; then echo "Kandidatenliste abgelegt (Versuch $versuch)."; break; fi
+            git fetch --quiet --depth=1 origin main
+            git reset --hard --quiet FETCH_HEAD
+          done
+          cd "$hier"
+
       - name: RS-Linien-Bericht in den Reiter Berichte
         if: steps.bau.outputs.veroeffentlichen == 'ja' && steps.token.outputs.da == 'ja'
         continue-on-error: true
