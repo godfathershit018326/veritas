@@ -103,6 +103,7 @@ jobs:
         env:
           MODUS: ${{ inputs.modus || 'taeglich' }}
           WIKIMEDIA_TOKEN: ${{ secrets.WIKIMEDIA_TOKEN }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python -m innovation.lauf --daten .daten --modus "$MODUS"
 
       - name: Wikipedia ab 2015 nachladen (fehlende Firmen, in Portionen)
@@ -110,6 +111,7 @@ jobs:
         env:
           HOECHSTENS: ${{ inputs.hoechstens }}
           WIKIMEDIA_TOKEN: ${{ secrets.WIKIMEDIA_TOKEN }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python -m innovation.lauf --daten .daten --modus nachladen ${HOECHSTENS:+--hoechstens "$HOECHSTENS"}
 
       - name: Stand merken

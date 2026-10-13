@@ -1,0 +1,102 @@
+name: Quartalsmeldungen messen (Phase 0)
+run-name: Quartalsmeldungen messen
+
+# Phase 0 der Quartalsmeldungen (Dokument 05, 2.6; Machbarkeitsstudie
+# 13.10.2026): misst, wie lange die Newswires der SEC voraus sind. Nur
+# lesen und messen, keine Auswertung, keine Meldung. Abgeschottet: Teil
+# des Innovationsmodells, schreibt nur nach innovation/quartalsmeldungen/
+# im privaten Datenrepo. Der Zeitplan (vorboerslich und nachboerslich an
+# New Yorker Handelstagen) wirkt erst, wenn der Schalter
+# QUARTALSMELDUNGEN_MESSEN in innovation/einstellungen.py an ist (Gerhards
+# Freigabe); sonst beendet sich der Lauf sofort. Das Protokoll nennt keine
+# Kuerzel und keine Firmennamen.
+on:
+  schedule:
+    - cron: "50 9 * * 1-5"    # 05:50 New York (Sommerzeit), vorboerslich
+    - cron: "50 19 * * 1-5"   # 15:50 New York (Sommerzeit), nachboerslich
+  workflow_dispatch:
+    inputs:
+      minuten:
+        description: "Messdauer in Minuten"
+        default: "120"
+      erzwingen:
+        description: "Trotz ausgeschaltetem Schalter messen (ja/nein)"
+        default: "nein"
+
+concurrency:
+  group: quartalsmeldungen-messung
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  messen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - name: Schalter pruefen
+        id: schalter
+        env:
+          ERZWINGEN: ${{ inputs.erzwingen }}
+        run: |
+          an=$(python3 -c "import innovation.einstellungen as E; print('ja' if E.QUARTALSMELDUNGEN_MESSEN else 'nein')")
+          if [ "$an" = "ja" ] || [ "$ERZWINGEN" = "ja" ]; then
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Schalter QUARTALSMELDUNGEN_MESSEN ist aus; kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.schalter.outputs.los == 'ja'
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .daten
+          sparse-checkout: |
+            innovation/quartalsmeldungen
+
+      - uses: actions/setup-python@v5
+        if: steps.schalter.outputs.los == 'ja'
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        if: steps.schalter.outputs.los == 'ja'
+        run: pip install -q requests
+
+      - name: Messen
+        if: steps.schalter.outputs.los == 'ja'
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          MINUTEN: ${{ inputs.minuten }}
+          ERZWINGEN: ${{ inputs.erzwingen }}
+        run: |
+          # Zeitplan: vorboerslich 220 Minuten (05:50 bis 09:30), nachboerslich 110 Minuten (15:50 bis 17:40 New York)
+          if [ -n "$MINUTEN" ]; then m="$MINUTEN"; elif [ "$(TZ=America/New_York date +%H)" -lt 12 ]; then m=220; else m=110; fi
+          python -m innovation.quartalsmeldungen.messung --daten .daten --minuten "$m" $([ "$ERZWINGEN" = "ja" ] && echo --erzwingen)
+          python -m innovation.quartalsmeldungen.messung --daten .daten --bericht > /dev/null
+
+      - name: Ablegen
+        if: steps.schalter.outputs.los == 'ja'
+        run: |
+          cd .daten
+          git config user.name "veritas-quartalsmeldungen"
+          git config user.email "actions@users.noreply.github.com"
+          for versuch in 1 2 3; do
+            git add -A -- innovation/quartalsmeldungen
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
+            git commit -q -m "Quartalsmeldungen: Messung Newswire gegen SEC"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
+            git fetch --quiet --depth=1 origin main
+            git rebase --quiet FETCH_HEAD || { git rebase --abort; git reset --soft FETCH_HEAD; }
+          done
