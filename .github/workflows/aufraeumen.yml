@@ -35,7 +35,7 @@ permissions:
 jobs:
   lauf:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/entsperren
