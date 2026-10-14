@@ -119,6 +119,17 @@ jobs:
             echo "Die Zuordnungsliste $NAME liess sich nicht holen; von E2 greift nur der Namensteil."
           fi
 
+      - name: Kursbibliothek für die Volumenkurven holen
+        # Die Aufzeichnungen des Wächters (kursrekorder.py); hat die
+        # Bibliothek genug Tage einer Aktie, baut der Nachtscan ihre
+        # Volumenkurve daraus (volumen.kurven_aus_aufzeichnung).
+        if: steps.pruefung.outputs.noetig == 'ja'
+        run: |
+          if [ -n "$DATEN_EINSTELLUNGEN" ] && [ -d "$DATEN_EINSTELLUNGEN/.git" ]; then
+            git -C "$DATEN_EINSTELLUNGEN" sparse-checkout add kursbibliothek 2>/dev/null || true
+            echo "Kursbibliothek: $(find "$DATEN_EINSTELLUNGEN/kursbibliothek" -name '*.csv.gz' 2>/dev/null | wc -l) Tagesdateien."
+          fi
+
       - name: Scanner ausführen
         if: steps.pruefung.outputs.noetig == 'ja'
         env:

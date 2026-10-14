@@ -58,6 +58,33 @@ jobs:
           fi
           python breakout_watcher.py kaufpunkte.xlsx --alle --dauerwache "${{ github.event.inputs.dauerwache || '0' }}"
 
+      - name: Kursbibliothek sichern
+        # Die Aufzeichnung des Laufs (kursaufzeichnung.csv.gz, ein Punkt je
+        # Aktie und Minute) in die Kursbibliothek des privaten Datenrepos
+        # vereinen: kursbibliothek/JAHR/DATUM.csv.gz, dauerhaft (Mathias,
+        # 14.10.2026). Mehrere Laeufe am Tag werden zusammengelegt.
+        if: always()
+        run: |
+          if [ -z "$DATEN_EINSTELLUNGEN" ] || [ ! -f kursaufzeichnung.csv.gz ]; then
+            echo "Keine Aufzeichnung oder kein Datenrepo; nichts zu sichern."
+            exit 0
+          fi
+          hier="$PWD"
+          cd "$DATEN_EINSTELLUNGEN"
+          git config user.name "breakout-watcher"
+          git config user.email "actions@users.noreply.github.com"
+          git sparse-checkout add kursbibliothek 2>/dev/null || true
+          for versuch in 1 2 3; do
+            git fetch --quiet --depth=1 origin main
+            git reset --hard --quiet FETCH_HEAD
+            python "$hier/kursrekorder.py" --sichern "$hier/kursaufzeichnung.csv.gz" --repo "$PWD"
+            git add -A -- kursbibliothek
+            if git diff --cached --quiet; then echo "Kursbibliothek unveraendert."; break; fi
+            git commit -q -m "Kursbibliothek: Aufzeichnung des Wächterlaufs"
+            if git push --quiet origin HEAD:main; then echo "Kursbibliothek gesichert (Versuch $versuch)."; break; fi
+          done
+          cd "$hier"
+
       - name: ntfy-Verlauf sichern
         if: always()
         run: |

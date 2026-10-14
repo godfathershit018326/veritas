@@ -1,0 +1,59 @@
+name: Wochenrückblick
+
+# Samstag 10:15 Uhr Wiener Zeit in der Sommerzeit, 09:15 Uhr in der
+# Winterzeit (Mathias, 14.10.2026, Nachtauftrag). Der Bericht geht in den
+# Reiter Berichte der App; per ntfy kommt nur die kurze Meldung ohne Kürzel.
+on:
+  schedule:
+    - cron: "15 8 * * 6"
+  workflow_dispatch:
+    inputs:
+      senden:
+        description: "Bericht ablegen und melden (ja/nein); nein zeigt ihn nur im Protokoll"
+        required: false
+        default: "nein"
+      heute:
+        description: "Lauftag JJJJ-MM-TT, leer heißt heute"
+        required: false
+        default: ""
+
+concurrency:
+  group: wochenrueckblick
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bericht:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests pandas numpy yfinance
+      - name: Selbsttests
+        run: |
+          python berichte.py --selbsttest
+          python wochenrueckblick.py --selbsttest
+      - name: Wochenrückblick bauen, ablegen und melden
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          SENDEN: ${{ github.event.inputs.senden }}
+          HEUTE: ${{ github.event.inputs.heute }}
+          EREIGNIS: ${{ github.event_name }}
+        run: |
+          if [ "$EREIGNIS" = "schedule" ] || [ "$SENDEN" = "ja" ]; then
+            python wochenrueckblick.py --senden ${HEUTE:+--heute "$HEUTE"}
+          else
+            python wochenrueckblick.py --anzeigen ${HEUTE:+--heute "$HEUTE"}
+          fi
