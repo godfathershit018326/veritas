@@ -1,15 +1,6 @@
 name: Auto-Wachstum (Auto-Liste)
 run-name: Auto-Wachstum
 
-# Dokument 03, Teil A0/A0b/A0c: nach dem Bau der Scanner-Daten (jeden
-# Handelstag nach Boersenschluss und beim Neubau am Samstag) die Auto-Liste
-# "Auto-Wachstum" neu bestimmen. Abgeschottet: schreibt nur nach
-# auto_wachstum/ und einstellungen/auto_wachstum.csv im privaten Datenrepo;
-# der Waechter liest die Liste ueber listen.py nur mit dem Schalter in
-# config.py (seit 12.10.2026 an: zwei Wochen Parallelbetrieb). Keine Meldung
-# aus diesem Ablauf; faellt er aus, meldet es das Lebenszeichen (K8). Je Tag
-# bleibt ein Stand unter auto_wachstum/historie/ fuer den Bericht P3.
-# Das Protokoll nennt keine Kuerzel.
 on:
   workflow_run:
     workflows: ["Scanner-Daten bauen"]
@@ -62,7 +53,7 @@ jobs:
             einstellungen
             konsens
 
-      - name: Neue Scanner-Tabelle?
+      - name: Fällig?
         id: neu
         if: steps.fenster.outputs.los == 'ja'
         env:
@@ -112,13 +103,13 @@ jobs:
             echo "Kein Fundament-Release."
           fi
 
-      - name: Auto-Liste bestimmen
+      - name: Rechnen
         if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python auto_wachstum.py --daten .daten --tabelle scanner_tabelle.parquet --analysten scanner_analysten.parquet --kurse scanner_kurse_3j.parquet --fundament fundament
 
-      - name: Bericht P3 fortschreiben
+      - name: Bericht
         if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
         run: python auto_wachstum.py --daten .daten --bericht
 

@@ -1,18 +1,9 @@
 name: Episodic-Pivot-Messung
 run-name: Episodic-Pivot-Messung
 
-# Die Rueckmessung des Episodic Pivot (Mathias, 14.10.2026: "Sofort scharf,
-# dazu eine Rueckmessung"): episodic_messung.py rechnet die Folgetags-Marke
-# ueber die Tageskurse der letzten drei Jahre nach und die Marke ueber dem
-# Eroeffnungsbereich ueber die Fuenf-Minuten-Kerzen der letzten 60
-# Handelstage von Yahoo; die Zahlen-Termine der Vergangenheit kommen von
-# Yahoo. Der Bericht liegt unter messungen/episodic/ im privaten Datenrepo.
-# Sendet nichts, setzt keine Alarme, schreibt nichts, was Waechter, Nachtscan
-# oder Mappe lesen. Das Protokoll nennt keine Kuerzel. Laeuft nur ausserhalb
-# 15:30 bis 22:00 Wien.
 on:
   schedule:
-    - cron: "45 6 * * 6"      # Samstag 06:45 UTC, nach der Darvas-Messung
+    - cron: "45 6 * * 6"
   workflow_dispatch:
     inputs:
       monate:

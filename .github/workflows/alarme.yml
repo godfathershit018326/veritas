@@ -9,18 +9,18 @@ on:
         default: "testpush"
         type: choice
         options:
-          - testpush          # nur eine ntfy-Testnachricht aufs Handy
-          - datenvergleich    # Yahoo gegen FMP prüfen (ändert nichts)
-          - ntfyputz          # nur die ntfy-Meldungen löschen (nach Handelsschluss)
-          - websocketmessung  # Finnhub-WebSocket ausmessen (ändert nichts)
-          - livetest          # Wächter mit Live-Strom, OHNE zu senden
-          - liquiditaet       # Welche eurer Aktien sind echtzeit-tauglich?
-          - feedpruefung      # Deckt der Gratis-Strom alle Aktien ab?
-          - grenztest        # Grenze oder Abdeckung: zwei Dinge oder eines?
-          - yahoostrom       # Trägt Yahoos eigener Live-Strom die ganze Liste?
-          - volumenkurve     # Referenzkurve F(t) neu aus Kursdaten bauen
-          - terminvergleich  # Zahlen-Termine: Finnhub gegen Yahoo und Nasdaq
-          - kerzenvergleich  # Tageskerzen: Yahoo gegen Twelve Data (liest nur)
+          - testpush
+          - datenvergleich
+          - ntfyputz
+          - websocketmessung
+          - livetest
+          - liquiditaet
+          - feedpruefung
+          - grenztest
+          - yahoostrom
+          - volumenkurve
+          - terminvergleich
+          - kerzenvergleich
       loeschen:
         description: "Zusatzwert für Messungen (z. B. Sekunden oder Kürzelzahl)"
         required: false
@@ -54,7 +54,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: "Sperre gegen doppelte Finnhub-Verbindung"
+      - name: Sperre
         if: ${{ contains('websocketmessung,liquiditaet,feedpruefung,grenztest', github.event.inputs.modus) && github.event.inputs.trotz_waechter != 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -74,7 +74,7 @@ jobs:
         run: |
           pip install requests pandas numpy scipy openpyxl yfinance
 
-      - name: "Echtzeit-Tauglichkeit messen"
+      - name: Modus liquiditaet
         if: ${{ github.event.inputs.modus == 'liquiditaet' }}
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
@@ -82,7 +82,7 @@ jobs:
           pip install websocket-client
           python liquiditaet.py ${{ github.event.inputs.loeschen || '180' }}
 
-      - name: "Abdeckung des Gratis-Stroms pruefen"
+      - name: Modus feedpruefung
         if: ${{ github.event.inputs.modus == 'feedpruefung' }}
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
@@ -90,17 +90,17 @@ jobs:
           pip install websocket-client
           python feedpruefung.py ${{ github.event.inputs.loeschen || '300' }}
 
-      - name: "Volumen-Referenzkurve bauen"
+      - name: Modus volumenkurve
         if: ${{ github.event.inputs.modus == 'volumenkurve' }}
         run: |
           python volumen.py --bauen
           python volumen.py
 
-      - name: "Yahoos Live-Strom messen"
+      - name: Modus yahoostrom
         if: ${{ github.event.inputs.modus == 'yahoostrom' }}
         run: python yahoo_strom.py ${{ github.event.inputs.loeschen || '180' }}
 
-      - name: "Grenze gegen Abdeckung messen"
+      - name: Modus grenztest
         if: ${{ github.event.inputs.modus == 'grenztest' }}
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
@@ -108,7 +108,7 @@ jobs:
           pip install websocket-client
           python grenztest.py ${{ github.event.inputs.loeschen }}
 
-      - name: "Wächter mit Live-Strom im Trockenlauf"
+      - name: Modus livetest
         if: ${{ github.event.inputs.modus == 'livetest' }}
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
@@ -117,7 +117,7 @@ jobs:
           python breakout_watcher.py kaufpunkte.xlsx --dry-run \
             --dauerwache ${{ github.event.inputs.loeschen || '8' }}
 
-      - name: "Finnhub-WebSocket messen"
+      - name: Modus websocketmessung
         if: ${{ github.event.inputs.modus == 'websocketmessung' }}
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
@@ -125,31 +125,31 @@ jobs:
           pip install websocket-client
           python finnhub_messung.py ${{ github.event.inputs.loeschen || '150' }}
 
-      - name: "ntfy-Meldungen löschen"
+      - name: Modus ntfyputz
         if: ${{ github.event.inputs.modus == 'ntfyputz' }}
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: python ntfy_verlauf.py --putz "$NTFY_TOPIC"
 
-      - name: "Daten vergleichen (Yahoo gegen FMP)"
+      - name: Modus datenvergleich
         if: ${{ github.event.inputs.modus == 'datenvergleich' }}
         env:
           FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
         run: python datenvergleich.py ${{ github.event.inputs.loeschen }}
 
-      - name: "Zahlen-Termine vergleichen (Finnhub gegen Yahoo und Nasdaq)"
+      - name: Modus terminvergleich
         if: ${{ github.event.inputs.modus == 'terminvergleich' }}
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
         run: python termine_vergleich.py termine_vergleich.txt
 
-      - name: "Tageskerzen vergleichen (Yahoo gegen Twelve Data)"
+      - name: Modus kerzenvergleich
         if: ${{ github.event.inputs.modus == 'kerzenvergleich' }}
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
         run: python kerzenvergleich.py
 
-      - name: "Terminvergleich sichern"
+      - name: Ergebnis sichern
         if: ${{ github.event.inputs.modus == 'terminvergleich' }}
         uses: actions/upload-artifact@v4
         with:
@@ -157,7 +157,7 @@ jobs:
           path: termine_vergleich.txt
           retention-days: 1
 
-      - name: "Push-Testnachricht (ntfy)"
+      - name: Modus testpush
         if: ${{ github.event.inputs.modus == 'testpush' }}
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}

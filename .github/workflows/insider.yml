@@ -34,7 +34,7 @@ jobs:
       - name: Abhängigkeiten
         run: pip install requests yfinance pandas
 
-      - name: Insider-Käufe holen und bewerten
+      - name: Rechnen
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python insider_edgar.py --scan ${{ github.event.inputs.datum }}

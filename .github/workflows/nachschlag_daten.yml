@@ -54,13 +54,13 @@ jobs:
             echo "Die Zuordnungsliste $NAME liess sich nicht holen; von E2 greift nur der Namensteil."
           fi
 
-      - name: RS-Universum gegen den ganzen US-Markt
+      - name: Rechnen 1
         run: python rs_universum.py --bauen
 
-      - name: Sektor-Rangliste der 36 ETFs
+      - name: Rechnen 2
         run: python sektor_rangliste.py --bauen
 
-      - name: IBD-Ratings aus dem SEC-Fundament
+      - name: Rechnen 3
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}

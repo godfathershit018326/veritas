@@ -1,19 +1,10 @@
 name: Quartalsmeldungen messen (Phase 0)
 run-name: Quartalsmeldungen messen
 
-# Phase 0 der Quartalsmeldungen (Dokument 05, 2.6; Machbarkeitsstudie
-# 13.10.2026): misst, wie lange die Newswires der SEC voraus sind. Nur
-# lesen und messen, keine Auswertung, keine Meldung. Abgeschottet: Teil
-# des Innovationsmodells, schreibt nur nach innovation/quartalsmeldungen/
-# im privaten Datenrepo. Der Zeitplan (vorboerslich und nachboerslich an
-# New Yorker Handelstagen) wirkt erst, wenn der Schalter
-# QUARTALSMELDUNGEN_MESSEN in innovation/einstellungen.py an ist (Gerhards
-# Freigabe); sonst beendet sich der Lauf sofort. Das Protokoll nennt keine
-# Kuerzel und keine Firmennamen.
 on:
   schedule:
-    - cron: "50 9 * * 1-5"    # 05:50 New York (Sommerzeit), vorboerslich
-    - cron: "50 19 * * 1-5"   # 15:50 New York (Sommerzeit), nachboerslich
+    - cron: "50 9 * * 1-5"
+    - cron: "50 19 * * 1-5"
   workflow_dispatch:
     inputs:
       minuten:
@@ -81,7 +72,6 @@ jobs:
           MINUTEN: ${{ inputs.minuten }}
           ERZWINGEN: ${{ inputs.erzwingen }}
         run: |
-          # Zeitplan: vorboerslich 220 Minuten (05:50 bis 09:30), nachboerslich 110 Minuten (15:50 bis 17:40 New York)
           if [ -n "$MINUTEN" ]; then m="$MINUTEN"; elif [ "$(TZ=America/New_York date +%H)" -lt 12 ]; then m=220; else m=110; fi
           python -m innovation.quartalsmeldungen.messung --daten .daten --minuten "$m" $([ "$ERZWINGEN" = "ja" ] && echo --erzwingen)
           python -m innovation.quartalsmeldungen.messung --daten .daten --bericht > /dev/null

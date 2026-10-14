@@ -1,0 +1,59 @@
+name: Aufräumen
+
+on:
+  schedule:
+    - cron: "4,19,34,49 * * * *"
+  workflow_run:
+    workflows:
+      - "Pattern-Scanner (Kaufpunkte)"
+      - "Scanner-Daten bauen"
+      - "Breakout-Wächter (Dauerwache, Prüftakt 2 s)"
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      modus:
+        description: "laufend, trocken oder nachholen"
+        required: true
+        default: "trocken"
+      von:
+        description: "nachholen: Beginn (UTC)"
+        required: false
+        default: ""
+      bis:
+        description: "nachholen: Ende (UTC)"
+        required: false
+        default: ""
+
+concurrency:
+  group: aufraeumen-${{ github.event_name }}-${{ github.event.workflow_run.id || 'takt' }}
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  lauf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+      - name: Lauf
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+          REPO: ${{ github.repository }}
+          SELBST: ${{ github.run_id }}
+          EREIGNIS: ${{ github.event_name }}
+          AUSLOESER: ${{ github.event.workflow_run.id }}
+          MODUS: ${{ inputs.modus }}
+          VON: ${{ inputs.von }}
+          BIS: ${{ inputs.bis }}
+        run: python3 aufraeumen.py

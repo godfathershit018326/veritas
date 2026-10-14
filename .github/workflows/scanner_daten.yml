@@ -49,7 +49,7 @@ jobs:
         with:
           token: ${{ secrets.DATEN_TOKEN }}
 
-      - name: Ist eine neue Scanner-Tabelle faellig?
+      - name: Fällig?
         id: pruefung
         env:
           ERZWINGEN: ${{ github.event.inputs.erzwingen }}
@@ -89,7 +89,7 @@ jobs:
             echo "da=ja" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Analystenwerte der Vornacht holen
+      - name: Daten holen 1
         if: steps.pruefung.outputs.noetig == 'ja' && steps.token.outputs.da == 'ja'
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
@@ -100,7 +100,7 @@ jobs:
             echo "Noch keine Analystendatei im Datenrepo; die Rotation beginnt von vorn."
           fi
 
-      - name: Eingefrorenen Konsens holen
+      - name: Daten holen 2
         if: steps.pruefung.outputs.noetig == 'ja' && steps.token.outputs.da == 'ja'
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
@@ -128,7 +128,7 @@ jobs:
           echo "Einfrier-Laeufe geholt: $GEHOLT von $ANZAHL"
           ls -l .cache/konsens
 
-      - name: Branchen-Zuordnung holen
+      - name: Daten holen 3
         if: steps.pruefung.outputs.noetig == 'ja' && steps.token.outputs.da == 'ja'
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
@@ -173,7 +173,7 @@ jobs:
           fi
           ls -l scanner_tabelle.parquet scanner_analysten.parquet scanner_gruppen.json scanner_stand.json basis_stufen.json .cache/scanner/scanner_kurse_3j.parquet
 
-      - name: Tabelle als Release-Anhang veroeffentlichen
+      - name: Tabelle ablegen
         if: steps.bau.outputs.veroeffentlichen == 'ja' && steps.token.outputs.da == 'ja'
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
@@ -185,10 +185,7 @@ jobs:
           fi
           gh release upload scanner-daten --repo "$DATEN_REPO" scanner_tabelle.parquet scanner_stand.json --clobber
 
-      - name: Episodic-Pivot-Kandidaten ins Datenrepo
-        # Die Aktien mit Zahlen und toter Phase fuer den naechsten Handelstag
-        # (episodic_pivot.py, Mathias 14.10.2026); der Waechter liest sie mit
-        # den Einstellungen. Eine leere Liste ist ein Stand und wird abgelegt.
+      - name: Ablegen 2
         if: steps.bau.outputs.veroeffentlichen == 'ja' && steps.token.outputs.da == 'ja'
         run: |
           if [ -z "$DATEN_EINSTELLUNGEN" ] || [ ! -f episodic_kandidaten.csv ]; then
@@ -210,14 +207,14 @@ jobs:
           done
           cd "$hier"
 
-      - name: RS-Linien-Bericht in den Reiter Berichte
+      - name: Bericht ablegen
         if: steps.bau.outputs.veroeffentlichen == 'ja' && steps.token.outputs.da == 'ja'
         continue-on-error: true
         env:
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
         run: python rslinie_bericht.py --bauen --tabelle scanner_tabelle.parquet
 
-      - name: Analystenwerte und Kursarchiv ins private Datenrepo
+      - name: Ablegen 3
         if: steps.bau.outputs.veroeffentlichen == 'ja' && steps.token.outputs.da == 'ja'
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}

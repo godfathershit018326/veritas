@@ -32,7 +32,7 @@ jobs:
       - uses: ./.github/actions/einstellungen-holen
         with:
           token: ${{ secrets.DATEN_TOKEN }}
-      - name: Ist der Gap-Up-Bericht faellig?
+      - name: Fällig?
         id: pruefung
         env:
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
@@ -56,7 +56,7 @@ jobs:
         run: |
           python berichte.py --selbsttest
           python gapup_bericht.py --selbsttest
-      - name: Gap-Up-Bericht bauen und ablegen
+      - name: Bericht bauen und ablegen
         if: steps.pruefung.outputs.noetig == 'ja'
         env:
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
@@ -69,7 +69,7 @@ jobs:
     permissions:
       actions: write
     steps:
-      - name: Zusatzlauf der Vorabwerte vor der Eroeffnung
+      - name: Zusatzlauf
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

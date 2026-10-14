@@ -1,8 +1,5 @@
 name: Betriebsampel vor Handelsbeginn
 
-# 14:45 Uhr Wiener Zeit an Werktagen: 12:45 UTC in der Sommerzeit, 13:45 UTC
-# in der Winterzeit; das Skript laeuft nur, wenn es in Wien gerade 14 Uhr
-# ist, der andere Lauf endet still.
 on:
   schedule:
     - cron: "45 12,13 * * 1-5"
@@ -25,12 +22,12 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install requests
-      - name: Nur um 14 Uhr Wiener Zeit
+      - name: Zeitfenster pruefen
         id: zeit
         run: |
           STUNDE=$(TZ=Europe/Vienna date +%H)
           echo "stunde=$STUNDE" >> "$GITHUB_OUTPUT"
-      - name: Betriebsampel pruefen und bei Gelb oder Rot melden
+      - name: Pruefen und melden
         if: steps.zeit.outputs.stunde == '14' || github.event_name == 'workflow_dispatch'
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}

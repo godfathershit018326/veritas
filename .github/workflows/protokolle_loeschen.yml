@@ -1,8 +1,4 @@
 name: Alte Protokolle löschen
-# Loescht die Protokolle (Logs) aller Laeufe, die vor der Log-Maske vom
-# 12.10.2026 liefen; darin koennen noch Kuerzel stehen. Die Laeufe selbst
-# bleiben in der Liste, nur ihr Protokoll ist danach weg. Nur von Hand;
-# Gerhards Ja vom 12.10.2026. Dieses Protokoll nennt nur Zahlen.
 on:
   workflow_dispatch:
     inputs:
