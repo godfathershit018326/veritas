@@ -1,8 +1,5 @@
 name: Wochenrückblick
 
-# Samstag 10:15 Uhr Wiener Zeit in der Sommerzeit, 09:15 Uhr in der
-# Winterzeit (Mathias, 14.10.2026, Nachtauftrag). Der Bericht geht in den
-# Reiter Berichte der App; per ntfy kommt nur die kurze Meldung ohne Kürzel.
 on:
   schedule:
     - cron: "15 8 * * 6"

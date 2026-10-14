@@ -1,13 +1,6 @@
 name: Verkaufssignale (Verkaufen im Gewinn)
 run-name: Verkaufssignale
 
-# Dokument 04 (Verkaufen im Gewinn), Teil A und B als MELDUNGEN, ohne Bot
-# (Mathias, 13.10.2026). Laeuft nach dem Bau der Scanner-Daten, nur
-# ausserhalb 15:30 bis 22:00 Wien, liest positionen.json und
-# zahlen_termine.json aus diesem Repo und die Tageskurse des Releases,
-# schreibt nur verkauf/ im privaten Datenrepo und legt die Meldungen im
-# Reiter Berichte ab (Art verkauf). Waechter, Nachtscan, exit_regeln.py und
-# positionen.json bleiben unberuehrt. Das Protokoll nennt keine Kuerzel.
 on:
   workflow_run:
     workflows: ["Scanner-Daten bauen"]

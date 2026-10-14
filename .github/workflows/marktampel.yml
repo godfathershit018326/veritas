@@ -1,13 +1,5 @@
 name: Marktampel
 
-# Jeden Handelstag nach dem Schluss in New York (Mathias, 14.10.2026: "die
-# Marktampel nach IBD muss passen und sich jeden Tag aktualisieren, keine
-# veralteten Stände"): 22:05 UTC ist 18:05 Uhr New Yorker Sommerzeit und
-# 17:05 Uhr Winterzeit, der Schluss um 16:00 Uhr steht dann samt Volumen.
-# Der Lauf um 10:10 UTC (morgens in Wien, auch am Samstag für den Freitag)
-# ist der Ersatz, falls der Abendlauf scheiterte: er lädt nur, wenn die
-# Ablage noch nicht den letzten Handelstag trägt (schont Yahoo). Das
-# Ergebnis marktampel.json kommt ins Repo und als app/ampel.json in die App.
 on:
   schedule:
     - cron: "5 22 * * 1-5"
@@ -39,9 +31,9 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install requests pandas numpy yfinance
-      - name: Selbsttest der Regeln
+      - name: Selbsttest
         run: python marktbreite.py --selbsttest
-      - name: Marktampel rechnen
+      - name: Rechnen
         env:
           ERZWINGEN: ${{ github.event.inputs.erzwingen }}
         run: |
@@ -50,7 +42,7 @@ jobs:
           else
             python marktampel.py --nur-wenn-alt
           fi
-      - name: Marktampel ins Repo
+      - name: Ins Repo
         run: |
           git config user.name "marktampel"
           git config user.email "actions@users.noreply.github.com"

@@ -40,8 +40,6 @@ jobs:
     timeout-minutes: 330
     steps:
       - name: Eingaben im Protokoll verbergen
-        # Die Eingabe kommt aus der Ereignisdatei, nicht aus env, damit sie nicht
-        # vor dem Verbergen im Kopf des Schritts steht.
         run: |
           EINGABE=$(jq -r '.inputs.ticker // ""' "$GITHUB_EVENT_PATH")
           for t in $(printf '%s' "$EINGABE" | tr ',; ' '\n\n\n'); do [ -n "$t" ] && echo "::add-mask::$t"; done

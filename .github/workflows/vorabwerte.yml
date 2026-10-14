@@ -103,7 +103,7 @@ jobs:
           else
             python vorabwerte_8k.py --daten daten --modus "${{ inputs.modus }}" --hoechstens "${{ inputs.hoechstens }}" --stunden "${{ inputs.stunden }}"
           fi
-      - name: Earnings-Bericht
+      - name: Bericht
         if: steps.secrets.outputs.da == 'ja' && inputs.modus == 'strom'
         continue-on-error: true
         env:

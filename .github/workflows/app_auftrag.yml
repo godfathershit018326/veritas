@@ -32,8 +32,6 @@ jobs:
             exit 1
           fi
 
-      # Schneller (Gerhard, 12.10.2026: "das dauert ja voll lange"): git-crypt
-      # aus dem Zwischenspeicher statt jedes Mal per apt (spart etwa 5 s).
       - name: git-crypt aus dem Zwischenspeicher
         id: gitcrypt
         uses: actions/cache@v4
@@ -64,8 +62,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      # uv installiert dieselben Pakete aus seinem Zwischenspeicher in wenigen
-      # Sekunden statt 17 s mit pip.
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -74,7 +70,7 @@ jobs:
       - name: Abhaengigkeiten
         run: uv pip install --system -q requests pandas numpy scipy openpyxl yfinance pyarrow
 
-      - name: Nachttabelle und Analystenwerte holen
+      - name: Daten holen
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
@@ -84,7 +80,7 @@ jobs:
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_analysten.parquet --clobber > /dev/null 2>&1 \
             && echo "Analystenwerte geholt." || echo "Keine Analystenwerte."
 
-      - name: Kursarchiv holen (nur Hoer-Chart)
+      - name: Daten holen 2
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}

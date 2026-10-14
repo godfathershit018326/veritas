@@ -1,11 +1,6 @@
 name: Innovationsmodell (Sammler und Noten)
 run-name: Innovationsmodell
 
-# Dokument 05 (Innovations-Bewertungsmodell): taeglich nach dem Bau der
-# Scanner-Daten die Gratis-Sammler (Wikipedia, Apple-Ranglisten, FINRA) und
-# die drei Noten. Abgeschottet: schreibt nur nach innovation/ im privaten
-# Datenrepo, beruehrt kein laufendes System, sendet keine Meldung. Das
-# Protokoll nennt keine Kuerzel.
 on:
   workflow_run:
     workflows: ["Scanner-Daten bauen"]
@@ -62,7 +57,7 @@ jobs:
             konsens
             blacklist
 
-      - name: Neue Scanner-Tabelle?
+      - name: Fällig?
         id: neu
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
@@ -88,7 +83,7 @@ jobs:
         if: steps.neu.outputs.los == 'ja'
         run: pip install -q requests pandas pyarrow
 
-      - name: Scanner-Tabelle holen
+      - name: Daten holen
         if: steps.neu.outputs.los == 'ja'
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
@@ -98,7 +93,7 @@ jobs:
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_analysten.parquet --clobber > /dev/null 2>&1 \
             && echo "Analystenwerte geholt." || echo "Keine Analystenwerte."
 
-      - name: Sammler und Noten
+      - name: Rechnen
         if: steps.neu.outputs.los == 'ja'
         env:
           MODUS: ${{ inputs.modus || 'taeglich' }}
@@ -107,7 +102,7 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: python -m innovation.lauf --daten .daten --modus "$MODUS"
 
-      - name: Wikipedia ab 2015 nachladen (fehlende Firmen, in Portionen)
+      - name: Nachladen
         if: steps.neu.outputs.los == 'ja' && (inputs.modus || 'taeglich') == 'taeglich'
         env:
           HOECHSTENS: ${{ inputs.hoechstens }}

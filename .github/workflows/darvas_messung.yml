@@ -1,17 +1,9 @@
 name: Darvas-Messung (Box gegen 1977)
 run-name: Darvas-Messung
 
-# Dokument 04 (06.10.2026), Teil B 10: Darvas 1977 "als eigenes Muster nur im
-# Scanner, ohne Alarm und ohne Bot, und mitmessen. Scharf erst, wenn es besser
-# laeuft als unsere Darvas, und nur nach meiner Freigabe." Diese Messung
-# (darvas_messung.py) rechnet beide Fassungen ueber die Tageskurse der
-# letzten drei Jahre nach und legt den Bericht unter messungen/darvas/ im
-# privaten Datenrepo ab. Sie sendet nichts, setzt keine Alarme und schreibt
-# nichts, was Waechter, Nachtscan oder Mappe lesen. Das Protokoll nennt keine
-# Kuerzel. Laeuft nur ausserhalb 15:30 bis 22:00 Wien.
 on:
   schedule:
-    - cron: "15 6 * * 6"      # Samstag 06:15 UTC, nach dem Freitagsbau der Scanner-Daten
+    - cron: "15 6 * * 6"
   workflow_dispatch:
     inputs:
       monate:
