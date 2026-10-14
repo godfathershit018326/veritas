@@ -171,7 +171,7 @@ jobs:
             python scanner_daten.py --bauen --analysten "${ANALYSTEN:-rotation}" --konsens-ordner .cache/konsens --zuordnung .cache/zuordnung/branchen.json
             echo "veroeffentlichen=ja" >> "$GITHUB_OUTPUT"
           fi
-          ls -l scanner_tabelle.parquet scanner_analysten.parquet scanner_gruppen.json scanner_stand.json .cache/scanner/scanner_kurse_3j.parquet
+          ls -l scanner_tabelle.parquet scanner_analysten.parquet scanner_gruppen.json scanner_stand.json basis_stufen.json .cache/scanner/scanner_kurse_3j.parquet
 
       - name: Tabelle als Release-Anhang veroeffentlichen
         if: steps.bau.outputs.veroeffentlichen == 'ja' && steps.token.outputs.da == 'ja'
@@ -236,19 +236,20 @@ jobs:
           git config user.name "pattern-scanner"
           git config user.email "actions@users.noreply.github.com"
           SICHERUNG=$(mktemp -d)
-          cp scanner_stand.json "$SICHERUNG/"
+          cp scanner_stand.json basis_stufen.json "$SICHERUNG/"
           ERLEDIGT=nein
           for versuch in 1 2 3; do
             git fetch --quiet origin main
             git reset --hard --quiet FETCH_HEAD
             cp "$SICHERUNG/scanner_stand.json" scanner_stand.json
-            git add -- scanner_stand.json
+            cp "$SICHERUNG/basis_stufen.json" basis_stufen.json
+            git add -- scanner_stand.json basis_stufen.json
             if git diff --cached --quiet; then
               echo "Keine Aenderung gegenueber dem Stand im Repo."
               ERLEDIGT=ja
               break
             fi
-            git commit -q -m "Scanner-Daten: Stand der Nachttabelle"
+            git commit -q -m "Scanner-Daten: Stand der Nachttabelle und Basis-Stufen"
             if git push --quiet origin main; then
               echo "Veroeffentlicht (Versuch $versuch)."
               ERLEDIGT=ja
