@@ -1,0 +1,116 @@
+name: Hoer-Chart-Daten
+run-name: Hoer-Chart-Daten
+
+# Nach dem Bau der Scanner-Daten: Daten fuer die Seite Hoer-Chart der App
+# ins private Datenrepo. Liest nur, keine Meldung, mit Schalter in den
+# Einstellungen. Das Protokoll nennt keine Kuerzel. Erklaerung in
+# WORKFLOWS_ERKLAERT.md.
+on:
+  workflow_run:
+    workflows: ["Scanner-Daten bauen"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: hoer-chart
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  lauf:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Zeitfenster pruefen
+        id: fenster
+        run: |
+          zeit=$(TZ=Europe/Vienna date +%H%M)
+          if (( 10#$zeit >= 1530 && 10#$zeit < 2200 )) && [ "$(TZ=America/New_York date +%u)" -le 5 ]; then
+            echo "::notice::Handelszeit in New York: kein Lauf, damit nichts das laufende System belastet."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.fenster.outputs.los == 'ja'
+      - uses: ./.github/actions/entsperren
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      # Listen und Einstellungen in den Arbeitsordner, wie beim Waechter;
+      # listen.py liest sie dort (die Auto-Liste nur mit dem Schalter in
+      # config.py). Dazu die Maske fuer die oeffentlichen Protokolle.
+      - uses: ./.github/actions/einstellungen-holen
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+
+      - uses: actions/checkout@v4
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .hoer
+          sparse-checkout: |
+            app/hoerchart
+            einstellungen
+
+      - name: Schalter
+        id: schalter
+        if: steps.fenster.outputs.los == 'ja'
+        run: |
+          an=$(python3 -c "import json;print('nein' if json.load(open('.hoer/einstellungen/einstellungen.json', encoding='utf-8-sig')).get('hoer_chart') is False else 'ja')" 2>/dev/null || echo ja)
+          [ "$an" = "ja" ] || echo "Der Hoer-Chart ist in den Einstellungen ausgeschaltet; kein Lauf."
+          echo "an=$an" >> "$GITHUB_OUTPUT"
+
+      - name: Kursarchiv holen
+        if: steps.fenster.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_kurse_3j.parquet --clobber > /dev/null 2>&1 \
+            && echo "Kursarchiv geholt." || echo "Kursarchiv fehlt."
+
+      - uses: actions/setup-python@v5
+        if: steps.fenster.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        if: steps.fenster.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
+        run: pip install -q pandas numpy pyarrow
+
+      - name: Selbsttest
+        if: steps.fenster.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
+        run: |
+          python hoer_chart.py --selbsttest > /dev/null && python hoer_chart_daten.py --selbsttest > /dev/null \
+            && echo "Selbsttests gruen." || { echo "::error::Selbsttest rot."; exit 1; }
+
+      - name: Hoer-Chart-Daten rechnen
+        if: steps.fenster.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
+        run: python hoer_chart_daten.py --daten .hoer --kurse scanner_kurse_3j.parquet --positionen positionen.json
+
+      - name: Ablegen
+        if: steps.fenster.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
+        run: |
+          cd .hoer
+          git config user.name "veritas-hoer-chart"
+          git config user.email "actions@users.noreply.github.com"
+          cp -r app/hoerchart "$RUNNER_TEMP/hoerchart"
+          for versuch in 1 2 3; do
+            git add -A -- app/hoerchart
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
+            git commit -q -m "Hoer-Chart-Daten"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
+            git fetch --quiet --depth=1 origin main
+            git reset --hard --quiet FETCH_HEAD
+            rm -rf app/hoerchart && mkdir -p app && cp -r "$RUNNER_TEMP/hoerchart" app/hoerchart
+          done

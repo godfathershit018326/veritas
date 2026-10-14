@@ -84,6 +84,18 @@ jobs:
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_analysten.parquet --clobber > /dev/null 2>&1 \
             && echo "Analystenwerte geholt." || echo "Keine Analystenwerte."
 
+      - name: Kursarchiv holen (nur Hoer-Chart)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          NUMMER: ${{ inputs.nummer }}
+        run: |
+          art=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1], encoding='utf-8')).get('art',''))" ".app_daten/app/auftraege/$NUMMER.json" 2>/dev/null || echo "")
+          if [ "$art" = "hoerchart" ]; then
+            gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_kurse_3j.parquet --clobber > /dev/null 2>&1 \
+              && echo "Kursarchiv geholt." || echo "Kein Kursarchiv."
+          fi
+
       - name: Auftrag rechnen
         env:
           NUMMER: ${{ inputs.nummer }}
