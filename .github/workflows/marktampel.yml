@@ -63,7 +63,7 @@ jobs:
               echo "Nach dem Abgleich keine Änderung mehr."
               break
             fi
-            git commit -q -m "Marktampel: Schluss vom $TAG"
+            git commit -q -m "Aktualisierung"
             if git push --quiet origin main; then
               echo "Marktampel veröffentlicht (Versuch $versuch)."
               break

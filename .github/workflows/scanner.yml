@@ -18,7 +18,7 @@ env:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 200        # 87 Ticker @ 8 Calls/min brauchen Luft
+    timeout-minutes: 200
     permissions:
       contents: write
     steps:
@@ -30,7 +30,7 @@ jobs:
         with:
           token: ${{ secrets.DATEN_TOKEN }}
 
-      - name: Wochenputz (nach Freitag 16:02 New York, bis zur neuen Wochenliste)
+      - name: Wochenputz
         env:
           GITHUB_TOKEN: ${{ github.token }}
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
@@ -45,7 +45,7 @@ jobs:
               echo "Wochenputz: nichts einzuchecken."
               break
             fi
-            git commit -q -m "Wochenputz: Kaufpunkte, Alarm-Muster, Fokusliste, Melde-Gedächtnis und Einzelüberwachung der alten Woche geleert"
+            git commit -q -m "Aktualisierung"
             if git push --quiet origin main; then
               echo "Wochenputz eingecheckt (Versuch $versuch)."
               break
@@ -119,10 +119,7 @@ jobs:
             echo "Die Zuordnungsliste $NAME liess sich nicht holen; von E2 greift nur der Namensteil."
           fi
 
-      - name: Kursbibliothek für die Volumenkurven holen
-        # Die Aufzeichnungen des Wächters (kursrekorder.py); hat die
-        # Bibliothek genug Tage einer Aktie, baut der Nachtscan ihre
-        # Volumenkurve daraus (volumen.kurven_aus_aufzeichnung).
+      - name: Daten holen 2
         if: steps.pruefung.outputs.noetig == 'ja'
         run: |
           if [ -n "$DATEN_EINSTELLUNGEN" ] && [ -d "$DATEN_EINSTELLUNGEN/.git" ]; then
@@ -142,29 +139,21 @@ jobs:
             --out kaufpunkte.xlsx \
             --rate 8
 
-      - name: Sektor-Radar rechnen
+      - name: Rechnen 2
         if: steps.pruefung.outputs.noetig == 'ja'
         continue-on-error: true
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
         run: python sektor_radar.py --bauen
 
-      - name: Wochenregel auf die frische Mappe anwenden
+      - name: Wochenregel
         if: steps.pruefung.outputs.noetig == 'ja'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
         run: python wochenputz.py --nach-scan --mappe kaufpunkte.xlsx
 
-      - name: Excel als Artifact hochladen
-        if: steps.pruefung.outputs.noetig == 'ja'
-        uses: actions/upload-artifact@v4
-        with:
-          name: kaufpunkte
-          path: kaufpunkte.xlsx
-          retention-days: 1
-
-      - name: Ergebnis für die Veritas-Anzeige veröffentlichen
+      - name: Ergebnis ablegen
         if: steps.pruefung.outputs.noetig == 'ja'
         run: |
           cp kaufpunkte.xlsx kaufpunkte_aktuell.xlsx
@@ -201,7 +190,7 @@ jobs:
                 echo "Nach dem Abgleich keine Änderung mehr."
                 break
               fi
-              git commit -q -m "Nachtscan: kaufpunkte_aktuell.xlsx aktualisiert"
+              git commit -q -m "Aktualisierung"
               if git push --quiet origin main; then
                 echo "Ergebnisse veröffentlicht (Versuch $versuch)."
                 break

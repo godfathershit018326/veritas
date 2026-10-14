@@ -246,7 +246,7 @@ jobs:
               ERLEDIGT=ja
               break
             fi
-            git commit -q -m "Scanner-Daten: Stand der Nachttabelle und Basis-Stufen"
+            git commit -q -m "Aktualisierung"
             if git push --quiet origin main; then
               echo "Veroeffentlicht (Versuch $versuch)."
               ERLEDIGT=ja

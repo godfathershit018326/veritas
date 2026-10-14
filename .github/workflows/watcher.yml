@@ -36,7 +36,7 @@ jobs:
       - name: Abhängigkeiten
         run: pip install requests pandas numpy scipy openpyxl "yfinance>=1.5"
 
-      - name: Kaufpunkte aus dem Repo übernehmen
+      - name: Daten holen
         run: cp kaufpunkte_aktuell.xlsx kaufpunkte.xlsx
 
       - name: Zustand laden
@@ -46,7 +46,7 @@ jobs:
           key: watcher-state-${{ github.run_id }}
           restore-keys: watcher-state-
 
-      - name: Breakouts prüfen
+      - name: Lauf
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
@@ -81,7 +81,7 @@ jobs:
           done
           cd "$hier"
 
-      - name: ntfy-Verlauf sichern
+      - name: Stand sichern
         if: always()
         run: |
           git config user.name "pattern-scanner"
@@ -110,7 +110,7 @@ jobs:
               echo "Keine neuen Meldungen zu merken."
               break
             fi
-            git commit -q -m "ntfy-Verlauf und Trigger-Logbuch des Wächterlaufs"
+            git commit -q -m "Aktualisierung"
             if git push --quiet origin main; then
               echo "ntfy-Kennungen gesichert."
               break

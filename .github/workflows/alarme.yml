@@ -175,7 +175,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "Zustand unverändert."
           else
-            git commit -m "Zustand aktualisiert"
+            git commit -m "Aktualisierung"
             git pull --rebase origin main
             git push origin main
           fi
