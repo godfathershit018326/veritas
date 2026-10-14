@@ -92,5 +92,5 @@ jobs:
             git commit -q -m "Episodic-Pivot-Messung: Rueckmessung"
             if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
             git fetch --quiet --depth=1 origin main
-            git rebase --quiet FETCH_HEAD || { git rebase --abort; git reset --soft FETCH_HEAD; }
+            git reset --quiet FETCH_HEAD
           done
