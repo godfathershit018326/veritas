@@ -1,11 +1,3 @@
-# Schutz der oeffentlichen Actions-Protokolle (Sicherheitspruefung vom
-# 12.10.2026): Python laedt diese Datei beim Start, wenn ihr Ordner im
-# PYTHONPATH steht (das setzt die Aktion "Einstellungen holen"). Sie ersetzt
-# in allem, was ein Programm auf stdout und stderr schreibt, jedes Kuerzel
-# aus Gerhards Listen, der Auto-Liste, Einzelaktien, Positionen, Alarm-Kaufpunkten und der
-# Blacklist durch Punkte. Die Kuerzel liest sie zur Laufzeit aus den Dateien
-# im Arbeitsordner; in dieser Datei steht keines. Ein Fehler hier darf nie
-# ein Programm stoppen.
 import csv
 import json
 import os
