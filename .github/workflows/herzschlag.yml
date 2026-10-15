@@ -16,6 +16,10 @@ jobs:
       - uses: ./.github/actions/entsperren
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        continue-on-error: true
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
