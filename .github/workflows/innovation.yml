@@ -123,13 +123,21 @@ jobs:
           cd .daten
           git config user.name "veritas-innovation"
           git config user.email "actions@users.noreply.github.com"
-          cp -r innovation "$RUNNER_TEMP/innovation"
+          git add -A -- innovation
+          if git diff --cached --quiet; then echo "Nichts abzulegen."; exit 0; fi
+          git diff --cached --name-only --no-renames -z -- innovation > "$RUNNER_TEMP/eigene.lst"
+          mkdir -p "$RUNNER_TEMP/stand"
+          while IFS= read -r -d '' p; do
+            if [ -e "$p" ]; then mkdir -p "$RUNNER_TEMP/stand/$(dirname "$p")"; cp -p "$p" "$RUNNER_TEMP/stand/$p"; fi
+          done < "$RUNNER_TEMP/eigene.lst"
           for versuch in 1 2 3; do
-            git add -A -- innovation
-            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
             git commit -q -m "Innovationsmodell: Sammler und Noten"
             if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
             git fetch --quiet --depth=1 origin main
             git reset --hard --quiet FETCH_HEAD
-            rm -rf innovation && cp -r "$RUNNER_TEMP/innovation" innovation
+            while IFS= read -r -d '' p; do
+              if [ -e "$RUNNER_TEMP/stand/$p" ]; then mkdir -p "$(dirname "$p")"; cp -p "$RUNNER_TEMP/stand/$p" "$p"; else rm -f -- "$p"; fi
+            done < "$RUNNER_TEMP/eigene.lst"
+            git add -A -- innovation
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
           done

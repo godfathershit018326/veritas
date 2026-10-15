@@ -197,12 +197,16 @@ jobs:
           git config user.name "veritas-scanner-daten"
           git config user.email "actions@users.noreply.github.com"
           for versuch in 1 2 3; do
-            for f in episodic_kandidaten.csv hoch52_zahlen_kandidaten.csv; do
-              if [ -f "$hier/$f" ]; then
-                cp "$hier/$f" "einstellungen/$f"
-                git add -A -- "einstellungen/$f"
-              fi
-            done
+            cp "$hier/episodic_kandidaten.csv" einstellungen/episodic_kandidaten.csv
+            git add -A -- einstellungen/episodic_kandidaten.csv
+            if [ -f "$hier/episodic_kurven.json" ]; then
+              cp "$hier/episodic_kurven.json" einstellungen/episodic_kurven.json
+              git add -A -- einstellungen/episodic_kurven.json
+            fi
+            if [ -f "$hier/hoch52_zahlen_kandidaten.csv" ]; then
+              cp "$hier/hoch52_zahlen_kandidaten.csv" einstellungen/hoch52_zahlen_kandidaten.csv
+              git add -A -- einstellungen/hoch52_zahlen_kandidaten.csv
+            fi
             if git diff --cached --quiet; then echo "Kandidatenlisten unveraendert."; break; fi
             git commit -q -m "Kandidaten des naechsten Handelstags"
             if git push --quiet origin HEAD:main; then echo "Kandidatenliste abgelegt (Versuch $versuch)."; break; fi
