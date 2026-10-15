@@ -4,8 +4,9 @@ import os
 import re
 import sys
 import threading
+import time
 
-_LISTEN = ("finviz_3.csv", "darvas.csv", "dritte_liste.csv", "vierte_liste.csv", "einzelaktien.csv",
+_LISTEN =("finviz_3.csv", "darvas.csv", "dritte_liste.csv", "vierte_liste.csv", "einzelaktien.csv",
            "auto_wachstum.csv", "episodic_kandidaten.csv", "hoch52_zahlen_kandidaten.csv")
 _JSONS = ("positionen.json", "alarm_kaufpunkte.json", "fokusliste.json")
 _STOPP = {"OK", "ID", "IO", "ON", "IT", "AN", "AM", "UM", "IN", "AT", "BE", "DE", "API", "CSV", "UTC", "USA", "USD",
@@ -13,6 +14,9 @@ _STOPP = {"OK", "ID", "IO", "ON", "IT", "AN", "AM", "UM", "IN", "AT", "BE", "DE"
 _FORM = re.compile(r"(?:,?\s+(?:Inc\.?|Incorporated|Corp\.?|Corporation|Co\.?|Company|Ltd\.?|Limited|plc|PLC|"
                    r"N\.?V\.?|S\.?A\.?|AG|SE|LLC|L\.?P\.?|LP|Holdings?|Group|Trust|ADR|Class [A-C]|Common Stock|"
                    r"Ordinary Shares|American Depositary Shares?))+\.?\s*$")
+_FREMD = re.compile(r"possibly delisted|symbol may be delisted|no price data found|no timezone found|"
+                    r"failed to get ticker|yf[a-z]*error|finance\.yahoo\.com|not found for symbol|"
+                    r"is invalid, must be one of|\[\s*'[^'\]\n]{1,24}'(?:\s*,\s*'[^'\]\n]{1,24}')*\s*\]\s*:", re.IGNORECASE)
 
 
 def _kern(firma):
@@ -26,9 +30,28 @@ def _kern(firma):
     return f[4:] if f.lower().startswith("the ") else f
 
 
-def _laden():
+def _pfade(basis):
+    return ([os.path.join(basis, d) for d in _LISTEN], [os.path.join(basis, d) for d in _JSONS],
+            [os.path.join(basis, os.environ.get("DATEN_EINSTELLUNGEN", ".daten"), "blacklist/blacklist.json"),
+             os.path.join(basis, "blacklist.json")])
+
+
+def _signatur(basis):
+    s = []
+    for gruppe in _pfade(basis):
+        for p in gruppe:
+            try:
+                st = os.stat(p)
+                s.append((st.st_mtime_ns, st.st_size))
+            except OSError:
+                s.append(None)
+    return tuple(s)
+
+
+def _laden(basis="."):
     kuerzel, namen = set(), set()
-    for datei in _LISTEN:
+    listen, jsons, sperren = _pfade(basis)
+    for datei in listen:
         try:
             with open(datei, encoding="utf-8-sig") as f:
                 for z in csv.DictReader(f):
@@ -40,7 +63,7 @@ def _laden():
                         namen.add(n)
         except Exception:
             pass
-    for datei in _JSONS:
+    for datei in jsons:
         try:
             with open(datei, encoding="utf-8") as f:
                 d = json.load(f)
@@ -56,8 +79,7 @@ def _laden():
                 kuerzel |= {str(x.get("ticker", x) if isinstance(x, dict) else x).split("|")[0].upper() for x in werte}
         except Exception:
             pass
-    for pfad in (os.path.join(os.environ.get("DATEN_EINSTELLUNGEN", ".daten"), "blacklist", "blacklist.json"),
-                 "blacklist.json"):
+    for pfad in sperren:
         try:
             with open(pfad, encoding="utf-8") as f:
                 kuerzel |= {str(e.get("ticker", "")).split("|")[0].upper() for e in json.load(f).get("eintraege", [])}
@@ -74,9 +96,45 @@ def _muster(woerter, grenze_vorn, grenze_hinten):
                       + ")" + grenze_hinten)
 
 
+class _Stand:
+    def __init__(self, basis):
+        self.basis, self.sig, self.naechste = basis, None, 0.0
+        self.kuerzel, self.namen = set(), set()
+        self.ersetzen = self.zk = self.zn = None
+        self.sperre = threading.Lock()
+        self.laden()
+
+    def laden(self):
+        sig = _signatur(self.basis)
+        if sig == self.sig:
+            return
+        neu_k, neu_n = _laden(self.basis)
+        self.sig = sig
+        k, n = self.kuerzel | neu_k, self.namen | neu_n
+        if k == self.kuerzel and n == self.namen:
+            return
+        self.ersetzen = _muster(k, r"(?<![A-Za-z0-9.\-])", r"(?![A-Za-z0-9\-]|\.[A-Za-z0-9])")
+        self.zk = _muster({t for t in k if len(t) >= 2 and t not in _STOPP}, r"(?<![A-Za-z0-9.\-])",
+                          r"(?![A-Za-z0-9\-]|\.[A-Za-z0-9])")
+        self.zn = _muster(n, r"(?<![\w])", r"(?![\w])")
+        self.kuerzel, self.namen = k, n
+
+    def frisch(self):
+        jetzt = time.monotonic()
+        if jetzt < self.naechste or not self.sperre.acquire(blocking=False):
+            return
+        try:
+            self.naechste = jetzt + 1.0
+            self.laden()
+        except Exception:
+            pass
+        finally:
+            self.sperre.release()
+
+
 class _Maske:
-    def __init__(self, strom, ersetzen, zeilen_k, zeilen_n, ganze_zeilen):
-        self._strom, self._ersetzen, self._zk, self._zn = strom, ersetzen, zeilen_k, zeilen_n
+    def __init__(self, strom, stand, ganze_zeilen):
+        self._strom, self._stand = strom, stand
         self._ganze = ganze_zeilen
         self._rest = ""
         self._verwerfen = False
@@ -84,21 +142,25 @@ class _Maske:
         self.ausgeblendet = 0
 
     def _zeile(self, z):
+        self._stand.frisch()
         if self._ganze:
-            if (self._zk is not None and self._zk.search(z)) or (self._zn is not None and self._zn.search(z)):
+            if self._trifft(z):
                 self.ausgeblendet += 1
                 return ""
             return z
-        return self._ersetzen.sub("•••", z) if self._ersetzen is not None else z
+        ersetzen = self._stand.ersetzen
+        return ersetzen.sub("•••", z) if ersetzen is not None else z
 
-    def _trifft(self, text):
-        return (self._zk is not None and self._zk.search(text) is not None) or (
-            self._zn is not None and self._zn.search(text) is not None)
+    def _trifft(self, text, fremd=True):
+        zk, zn = self._stand.zk, self._stand.zn
+        return ((zk is not None and zk.search(text) is not None) or (zn is not None and zn.search(text) is not None)
+                or (fremd and self._ganze and _FREMD.search(text) is not None))
 
     def write(self, text):
         try:
             if not isinstance(text, str):
                 return self._strom.write(text)
+            self._stand.frisch()
             if not self._ganze:
                 return self._strom.write(self._zeile(text))
             laenge = len(text)
@@ -111,7 +173,7 @@ class _Maske:
                     if not text:
                         return laenge
                 ganz = self._rest + text
-                if self._trifft(ganz):
+                if self._trifft(ganz, "\n" in text):
                     self.ausgeblendet += ganz.count("\n") + (0 if ganz.endswith("\n") else 1)
                     self._rest = ""
                     self._verwerfen = not text.endswith("\n")
@@ -170,16 +232,12 @@ def _einschalten():
     in_github = os.environ.get("GITHUB_ACTIONS") == "true"
     if in_github:
         _ohne_quelltext()
-    kuerzel, namen = _laden()
-    if not kuerzel and not namen:
+    stand = _Stand(os.getcwd())
+    if not stand.kuerzel and not stand.namen:
         return
-    ersetzen = _muster(kuerzel, r"(?<![A-Za-z0-9.\-])", r"(?![A-Za-z0-9\-]|\.[A-Za-z0-9])")
-    zk = _muster({t for t in kuerzel if len(t) >= 2 and t not in _STOPP}, r"(?<![A-Za-z0-9.\-])",
-                 r"(?![A-Za-z0-9\-]|\.[A-Za-z0-9])")
-    zn = _muster(namen, r"(?<![\w])", r"(?![\w])")
     aus, fehler = sys.stdout, sys.stderr
-    m_aus = _Maske(aus, ersetzen, zk, zn, in_github)
-    m_fehler = _Maske(fehler, ersetzen, zk, zn, in_github)
+    m_aus = _Maske(aus, stand, in_github)
+    m_fehler = _Maske(fehler, stand, in_github)
     sys.stdout, sys.stderr = m_aus, m_fehler
     if in_github:
         import atexit
