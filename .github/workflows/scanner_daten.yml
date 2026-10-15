@@ -243,6 +243,18 @@ jobs:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python lockup.py --rechnen --tabelle scanner_tabelle.parquet --kurse .cache/scanner/scanner_kurse_3j.parquet
 
+      - name: Ablegen 4
+        if: steps.bau.outputs.veroeffentlichen == 'ja' && steps.token.outputs.da == 'ja'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          if [ -f .cache/scanner/scanner_vergleich_3j.parquet ]; then
+            gh release upload scanner-daten --repo "$DATEN_REPO" .cache/scanner/scanner_vergleich_3j.parquet --clobber
+          else
+            echo "Keine Vergleichsreihen."
+          fi
+
       - name: Stand ins Repo legen
         if: steps.bau.outputs.veroeffentlichen == 'ja'
         run: |
