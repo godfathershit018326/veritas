@@ -89,6 +89,8 @@ jobs:
         run: |
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_kurse_3j.parquet --clobber > /dev/null 2>&1 \
             && echo "Kursarchiv geholt." || echo "Kursarchiv fehlt."
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_vergleich_3j.parquet --clobber > /dev/null 2>&1 \
+            && echo "Vergleichsreihen geholt." || echo "Vergleichsreihen fehlen."
 
       - uses: actions/setup-python@v5
         if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
@@ -107,7 +109,7 @@ jobs:
 
       - name: Hoer-Chart-Daten rechnen
         if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
-        run: python hoer_chart_daten.py --daten .hoer --kurse scanner_kurse_3j.parquet --positionen positionen.json
+        run: python hoer_chart_daten.py --daten .hoer --kurse scanner_kurse_3j.parquet --positionen positionen.json --vergleich scanner_vergleich_3j.parquet
 
       - name: Stand merken
         if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja' && steps.neu.outputs.bau != ''

@@ -28,6 +28,7 @@ dritte_liste.csv
 vierte_liste.csv
 einzelaktien.csv
 einstellungen.json
+kursalarme.json
 .app_ausgabe/
 .app_daten/
 .scanner_vorlagen.json
