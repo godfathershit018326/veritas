@@ -94,3 +94,12 @@ jobs:
           done
           echo "Push nach drei Anlaeufen gescheitert."
           exit 1
+      - name: Unterlagen
+        if: ${{ !cancelled() && steps.token.outputs.da == 'ja' }}
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python verwaesserung.py --pruefen

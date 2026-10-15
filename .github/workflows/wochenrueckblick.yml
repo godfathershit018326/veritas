@@ -36,7 +36,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install requests pandas numpy yfinance
+      - run: pip install requests pandas numpy yfinance pyarrow
+      - name: Daten holen
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+        run: |
+          for d in scanner_tabelle.parquet scanner_kurse_3j.parquet; do
+            gh release download scanner-daten --repo "$DATEN_REPO" --pattern "$d" --clobber > /dev/null 2>&1 \
+              && echo "$d geholt." || echo "$d fehlt."
+          done
       - name: Selbsttests
         run: |
           python berichte.py --selbsttest
@@ -50,7 +59,18 @@ jobs:
           EREIGNIS: ${{ github.event_name }}
         run: |
           if [ "$EREIGNIS" = "schedule" ] || [ "$SENDEN" = "ja" ]; then
-            python wochenrueckblick.py --senden ${HEUTE:+--heute "$HEUTE"}
+            python wochenrueckblick.py --senden ${HEUTE:+--heute "$HEUTE"} --tabelle scanner_tabelle.parquet --kurse scanner_kurse_3j.parquet
           else
-            python wochenrueckblick.py --anzeigen ${HEUTE:+--heute "$HEUTE"}
+            python wochenrueckblick.py --anzeigen ${HEUTE:+--heute "$HEUTE"} --tabelle scanner_tabelle.parquet --kurse scanner_kurse_3j.parquet
           fi
+      - name: Daten für die Oberfläche
+        if: github.event_name == 'schedule' || github.event.inputs.senden == 'ja'
+        continue-on-error: true
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: python app_export.py woche --quelle wochenrueckblick.yml
+      - uses: ./.github/actions/app-ablegen
+        if: github.event_name == 'schedule' || github.event.inputs.senden == 'ja'
+        continue-on-error: true
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
