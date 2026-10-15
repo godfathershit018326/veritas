@@ -199,6 +199,10 @@ jobs:
           for versuch in 1 2 3; do
             cp "$hier/episodic_kandidaten.csv" einstellungen/episodic_kandidaten.csv
             git add -A -- einstellungen/episodic_kandidaten.csv
+            if [ -f "$hier/episodic_kurven.json" ]; then
+              cp "$hier/episodic_kurven.json" einstellungen/episodic_kurven.json
+              git add -A -- einstellungen/episodic_kurven.json
+            fi
             if git diff --cached --quiet; then echo "Kandidatenliste unveraendert."; break; fi
             git commit -q -m "Episodic Pivot: Kandidaten des naechsten Handelstags"
             if git push --quiet origin HEAD:main; then echo "Kandidatenliste abgelegt (Versuch $versuch)."; break; fi
