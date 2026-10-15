@@ -56,16 +56,34 @@ jobs:
             app/hoerchart
             einstellungen
 
+      - name: Fällig?
+        id: neu
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          ANLASS: ${{ github.event_name }}
+        run: |
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_stand.json --clobber > /dev/null 2>&1 || true
+          bau=$(python3 -c "import json;print(json.load(open('scanner_stand.json')).get('gebaut_am',''))" 2>/dev/null || echo "")
+          alt=$(cat .hoer/app/hoerchart/letzter_bau.txt 2>/dev/null || echo "")
+          echo "bau=$bau" >> "$GITHUB_OUTPUT"
+          if [ "$ANLASS" = "workflow_run" ] && [ -n "$bau" ] && [ "$bau" = "$alt" ]; then
+            echo "Die Scanner-Tabelle ist seit dem letzten Lauf unverändert; kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Schalter
         id: schalter
-        if: steps.fenster.outputs.los == 'ja'
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja'
         run: |
           an=$(python3 -c "import json;print('nein' if json.load(open('.hoer/einstellungen/einstellungen.json', encoding='utf-8-sig')).get('hoer_chart') is False else 'ja')" 2>/dev/null || echo ja)
           [ "$an" = "ja" ] || echo "Der Hoer-Chart ist in den Einstellungen ausgeschaltet; kein Lauf."
           echo "an=$an" >> "$GITHUB_OUTPUT"
 
       - name: Kursarchiv holen
-        if: steps.fenster.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
         run: |
@@ -75,26 +93,32 @@ jobs:
             && echo "Vergleichsreihen geholt." || echo "Vergleichsreihen fehlen."
 
       - uses: actions/setup-python@v5
-        if: steps.fenster.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
         with:
           python-version: "3.11"
 
       - name: Abhaengigkeiten
-        if: steps.fenster.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
         run: pip install -q pandas numpy pyarrow
 
       - name: Selbsttest
-        if: steps.fenster.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
         run: |
           python hoer_chart.py --selbsttest > /dev/null && python hoer_chart_daten.py --selbsttest > /dev/null \
             && echo "Selbsttests gruen." || { echo "::error::Selbsttest rot."; exit 1; }
 
       - name: Hoer-Chart-Daten rechnen
-        if: steps.fenster.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
         run: python hoer_chart_daten.py --daten .hoer --kurse scanner_kurse_3j.parquet --positionen positionen.json --vergleich scanner_vergleich_3j.parquet
 
+      - name: Stand merken
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja' && steps.neu.outputs.bau != ''
+        env:
+          BAU: ${{ steps.neu.outputs.bau }}
+        run: mkdir -p .hoer/app/hoerchart && printf '%s' "$BAU" > .hoer/app/hoerchart/letzter_bau.txt
+
       - name: Ablegen
-        if: steps.fenster.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.schalter.outputs.an == 'ja'
         run: |
           cd .hoer
           git config user.name "veritas-hoer-chart"

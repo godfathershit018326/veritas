@@ -54,30 +54,54 @@ jobs:
           sparse-checkout: |
             verkauf
 
-      - uses: actions/setup-python@v5
+      - name: Fällig?
+        id: neu
         if: steps.fenster.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          ANLASS: ${{ github.event_name }}
+        run: |
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_stand.json --clobber > /dev/null 2>&1 || true
+          bau=$(python3 -c "import json;print(json.load(open('scanner_stand.json')).get('gebaut_am',''))" 2>/dev/null || echo "")
+          alt=$(cat .daten/verkauf/letzter_bau.txt 2>/dev/null || echo "")
+          echo "bau=$bau" >> "$GITHUB_OUTPUT"
+          if [ "$ANLASS" = "workflow_run" ] && [ -n "$bau" ] && [ "$bau" = "$alt" ]; then
+            echo "Die Scanner-Tabelle ist seit dem letzten Lauf unverändert; kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja'
         with:
           python-version: "3.11"
 
       - name: Abhaengigkeiten
-        if: steps.fenster.outputs.los == 'ja'
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja'
         run: pip install -q requests pandas pyarrow
 
       - name: Tageskurse holen
-        if: steps.fenster.outputs.los == 'ja'
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja'
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
         run: gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_kurse_3j.parquet --clobber > /dev/null 2>&1 && echo "Kurse geholt." || echo "Kurse fehlen."
 
       - name: Verkaufssignale pruefen
-        if: steps.fenster.outputs.los == 'ja'
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja'
         env:
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
           TROCKEN: ${{ inputs.trocken }}
         run: python verkaufssignale.py --daten .daten --kurse scanner_kurse_3j.parquet $([ "$TROCKEN" = "ja" ] && echo --trocken)
 
+      - name: Stand merken
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.neu.outputs.bau != '' && inputs.trocken != 'ja'
+        env:
+          BAU: ${{ steps.neu.outputs.bau }}
+        run: mkdir -p .daten/verkauf && printf '%s' "$BAU" > .daten/verkauf/letzter_bau.txt
+
       - name: Ablegen
-        if: steps.fenster.outputs.los == 'ja'
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja'
         run: |
           cd .daten
           git config user.name "veritas-verkaufssignale"
