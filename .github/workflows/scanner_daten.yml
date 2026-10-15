@@ -207,6 +207,10 @@ jobs:
               cp "$hier/hoch52_zahlen_kandidaten.csv" einstellungen/hoch52_zahlen_kandidaten.csv
               git add -A -- einstellungen/hoch52_zahlen_kandidaten.csv
             fi
+            if [ -f "$hier/branchen_waechter.json" ]; then
+              cp "$hier/branchen_waechter.json" einstellungen/branchen_waechter.json
+              git add -A -- einstellungen/branchen_waechter.json
+            fi
             if git diff --cached --quiet; then echo "Kandidatenlisten unveraendert."; break; fi
             git commit -q -m "Kandidaten des naechsten Handelstags"
             if git push --quiet origin HEAD:main; then echo "Kandidatenliste abgelegt (Versuch $versuch)."; break; fi
@@ -235,6 +239,30 @@ jobs:
           gh release upload scanner-daten --repo "$DATEN_REPO" \
             scanner_analysten.parquet scanner_gruppen.json .cache/scanner/scanner_kurse_3j.parquet --clobber
 
+      - name: Nachtrechnung 1
+        if: steps.bau.outputs.veroeffentlichen == 'ja'
+        continue-on-error: true
+        run: python fuehrer_barometer.py --rechnen --kurse .cache/scanner/scanner_kurse_3j.parquet
+
+      - name: Nachtrechnung 2
+        if: steps.bau.outputs.veroeffentlichen == 'ja'
+        continue-on-error: true
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python lockup.py --rechnen --tabelle scanner_tabelle.parquet --kurse .cache/scanner/scanner_kurse_3j.parquet
+
+      - name: Ablegen 4
+        if: steps.bau.outputs.veroeffentlichen == 'ja' && steps.token.outputs.da == 'ja'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          if [ -f .cache/scanner/scanner_vergleich_3j.parquet ]; then
+            gh release upload scanner-daten --repo "$DATEN_REPO" .cache/scanner/scanner_vergleich_3j.parquet --clobber
+          else
+            echo "Keine Vergleichsreihen."
+          fi
+
       - name: Stand ins Repo legen
         if: steps.bau.outputs.veroeffentlichen == 'ja'
         run: |
@@ -242,6 +270,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           SICHERUNG=$(mktemp -d)
           cp scanner_stand.json basis_stufen.json "$SICHERUNG/"
+          for f in lockup.json fuehrer_barometer.json; do if [ -f "$f" ]; then cp "$f" "$SICHERUNG/"; fi; done
           ERLEDIGT=nein
           for versuch in 1 2 3; do
             git fetch --quiet origin main
@@ -249,6 +278,9 @@ jobs:
             cp "$SICHERUNG/scanner_stand.json" scanner_stand.json
             cp "$SICHERUNG/basis_stufen.json" basis_stufen.json
             git add -- scanner_stand.json basis_stufen.json
+            for f in lockup.json fuehrer_barometer.json; do
+              if [ -f "$SICHERUNG/$f" ]; then cp "$SICHERUNG/$f" "$f"; git add -- "$f"; fi
+            done
             if git diff --cached --quiet; then
               echo "Keine Aenderung gegenueber dem Stand im Repo."
               ERLEDIGT=ja
@@ -276,7 +308,7 @@ jobs:
           if [ -n "$GH_TOKEN" ]; then
             gh api -H "Accept: application/vnd.github.raw" "repos/$DATEN_REPO/contents/scanner_vorlagen.json" > .scanner_vorlagen.json 2>/dev/null || rm -f .scanner_vorlagen.json
           fi
-          python app_export.py scanner --vorlagen .scanner_vorlagen.json --quelle scanner_daten.yml
+          python app_export.py scanner ampel lockup --vorlagen .scanner_vorlagen.json --quelle scanner_daten.yml
       - uses: ./.github/actions/app-ablegen
         if: steps.bau.outputs.veroeffentlichen == 'ja'
         continue-on-error: true
