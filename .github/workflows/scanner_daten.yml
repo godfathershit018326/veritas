@@ -203,8 +203,12 @@ jobs:
               cp "$hier/episodic_kurven.json" einstellungen/episodic_kurven.json
               git add -A -- einstellungen/episodic_kurven.json
             fi
-            if git diff --cached --quiet; then echo "Kandidatenliste unveraendert."; break; fi
-            git commit -q -m "Episodic Pivot: Kandidaten des naechsten Handelstags"
+            if [ -f "$hier/hoch52_zahlen_kandidaten.csv" ]; then
+              cp "$hier/hoch52_zahlen_kandidaten.csv" einstellungen/hoch52_zahlen_kandidaten.csv
+              git add -A -- einstellungen/hoch52_zahlen_kandidaten.csv
+            fi
+            if git diff --cached --quiet; then echo "Kandidatenlisten unveraendert."; break; fi
+            git commit -q -m "Kandidaten des naechsten Handelstags"
             if git push --quiet origin HEAD:main; then echo "Kandidatenliste abgelegt (Versuch $versuch)."; break; fi
             git fetch --quiet --depth=1 origin main
             git reset --hard --quiet FETCH_HEAD

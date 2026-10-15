@@ -6,7 +6,7 @@ import sys
 import threading
 
 _LISTEN = ("finviz_3.csv", "darvas.csv", "dritte_liste.csv", "vierte_liste.csv", "einzelaktien.csv",
-           "auto_wachstum.csv", "episodic_kandidaten.csv")
+           "auto_wachstum.csv", "episodic_kandidaten.csv", "hoch52_zahlen_kandidaten.csv")
 _JSONS = ("positionen.json", "alarm_kaufpunkte.json", "fokusliste.json")
 _STOPP = {"OK", "ID", "IO", "ON", "IT", "AN", "AM", "UM", "IN", "AT", "BE", "DE", "API", "CSV", "UTC", "USA", "USD",
           "EUR", "SPY", "QQQ", "IWM", "DIA", "EMA", "SMA", "RS", "IPO", "ALL", "AND", "THE", "FOR", "ARE", "ONE", "NEW"}
