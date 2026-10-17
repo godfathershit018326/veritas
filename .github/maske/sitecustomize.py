@@ -9,6 +9,7 @@ import time
 _LISTEN =("finviz_3.csv", "darvas.csv", "dritte_liste.csv", "vierte_liste.csv", "einzelaktien.csv",
            "auto_wachstum.csv", "episodic_kandidaten.csv", "hoch52_zahlen_kandidaten.csv")
 _JSONS = ("positionen.json", "alarm_kaufpunkte.json", "fokusliste.json")
+_NEUE = re.compile(r"liste_[1-9][0-9]{0,3}\.csv")
 _STOPP = {"OK", "ID", "IO", "ON", "IT", "AN", "AM", "UM", "IN", "AT", "BE", "DE", "API", "CSV", "UTC", "USA", "USD",
           "EUR", "SPY", "QQQ", "IWM", "DIA", "EMA", "SMA", "RS", "IPO", "ALL", "AND", "THE", "FOR", "ARE", "ONE", "NEW"}
 _FORM = re.compile(r"(?:,?\s+(?:Inc\.?|Incorporated|Corp\.?|Corporation|Co\.?|Company|Ltd\.?|Limited|plc|PLC|"
@@ -30,8 +31,15 @@ def _kern(firma):
     return f[4:] if f.lower().startswith("the ") else f
 
 
+def _neue(basis):
+    try:
+        return sorted(d for d in os.listdir(basis) if _NEUE.fullmatch(d))
+    except Exception:
+        return []
+
+
 def _pfade(basis):
-    return ([os.path.join(basis, d) for d in _LISTEN], [os.path.join(basis, d) for d in _JSONS],
+    return ([os.path.join(basis, d) for d in _LISTEN + tuple(_neue(basis))], [os.path.join(basis, d) for d in _JSONS],
             [os.path.join(basis, os.environ.get("DATEN_EINSTELLUNGEN", ".daten"), "blacklist/blacklist.json"),
              os.path.join(basis, "blacklist.json")])
 

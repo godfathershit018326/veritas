@@ -26,6 +26,8 @@ finviz_3.csv
 darvas.csv
 dritte_liste.csv
 vierte_liste.csv
+liste_*.csv
+wochenlisten.json
 einzelaktien.csv
 einstellungen.json
 kursalarme.json
