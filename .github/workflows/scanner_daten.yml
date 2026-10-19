@@ -105,7 +105,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
         run: |
-          ANZAHL=$(python -c "from config import CFG; print(CFG['konsens_kennzahlen']['schnappschuesse'])")
+          ANZAHL=$(python -c "import config; print(config.CFG['konsens_kennzahlen']['schnappschuesse'])")
           mkdir -p .cache/konsens
           GEHOLT=0
           JAHRE=$(gh api repos/$DATEN_REPO/contents/konsens --jq '[.[] | select(.type == "dir") | .name] | sort | reverse | .[]' || true)
