@@ -2,8 +2,6 @@ name: Episodic-Pivot-Messung
 run-name: Episodic-Pivot-Messung
 
 on:
-  schedule:
-    - cron: "45 6 * * 6"
   workflow_dispatch:
     inputs:
       monate:

@@ -7,9 +7,6 @@ on:
         description: "Handelstag (JJJJ-MM-TT), leer = heute"
         required: false
         default: ""
-  schedule:
-    - cron: "40 12 * * 1-5"
-    - cron: "40 20 * * 1-5"
 
 concurrency:
   group: insider-scanner

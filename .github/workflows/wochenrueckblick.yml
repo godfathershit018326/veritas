@@ -1,8 +1,6 @@
 name: Wochenrückblick
 
 on:
-  schedule:
-    - cron: "15 8 * * 6"
   workflow_dispatch:
     inputs:
       senden:
