@@ -55,8 +55,9 @@ jobs:
           def anhaenge(r):
               return sorted((a.get("name"), a.get("size"), a.get("digest")) for a in r.get("assets") or [])
           a_entwurf, a_echt = anhaenge(entwurf), anhaenge(echte[0])
-          if not a_entwurf or a_entwurf != a_echt:
-              print(f"Die Anhänge stimmen nicht überein: Entwurf {len(a_entwurf)}, Release {len(a_echt)}; nichts gelöscht."); sys.exit(1)
+          fehlend = [x for x in a_entwurf if x not in a_echt or not x[2]]
+          if not a_entwurf or fehlend:
+              print(f"{len(fehlend)} von {len(a_entwurf)} Anhängen des Entwurfs fehlen im Release oder ohne Prüfsumme; nichts gelöscht."); sys.exit(1)
           groesse = sum(x[1] or 0 for x in a_entwurf)
           status, _ = anfrage(f"/releases/{kennung}", "DELETE")
           print(f"Entwurf gelöscht: Status {status}, {len(a_entwurf)} Anhänge, {groesse / 1e6:.0f} MB; das veröffentlichte Release bleibt.")
