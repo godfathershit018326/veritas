@@ -1,0 +1,81 @@
+name: Kalender-Scanner
+run-name: Kalender-Scanner
+
+on:
+  workflow_dispatch:
+    inputs:
+      melden:
+        description: "Bericht und Push nach der Vorlage (ja/nein)"
+        required: false
+        default: "nein"
+
+concurrency:
+  group: kalender-scanner
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  lauf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .daten
+          sparse-checkout: |
+            app/kalender_scanner.json
+            einstellungen/kalender_vorlage.json
+            kalender
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        run: pip install -q requests pandas pyarrow
+
+      - name: Selbsttest
+        run: python kalender_scanner.py --selbsttest
+
+      - name: Scanner-Tabelle und Kurse holen
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          for datei in scanner_tabelle.parquet scanner_analysten.parquet scanner_kurse_3j.parquet; do
+            gh release download scanner-daten --repo "$DATEN_REPO" --pattern "$datei" --clobber > /dev/null 2>&1 && echo "$datei geholt." || echo "$datei fehlt."
+          done
+
+      - name: Werte rechnen
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          MELDEN: ${{ inputs.melden }}
+        run: python kalender_scanner.py --daten .daten $([ "$MELDEN" = "ja" ] && echo --melden)
+
+      - name: Ablegen
+        run: |
+          cd .daten
+          git config user.name "veritas-kalender-scanner"
+          git config user.email "actions@users.noreply.github.com"
+          for versuch in 1 2 3; do
+            git add -A -- app/kalender_scanner.json kalender
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
+            git commit -q -m "Kalender-Scanner: Werte der Firmen mit Quartalszahlen"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
+            git fetch --quiet --depth=1 origin main
+            git reset --quiet FETCH_HEAD
+          done
