@@ -55,6 +55,10 @@ jobs:
           path: .daten
           sparse-checkout: |
             innovation/quartalsmeldungen
+            konsens
+            app/kalender_scanner.json
+            einstellungen/kalender_vorlage.json
+          sparse-checkout-cone-mode: false
 
       - uses: actions/setup-python@v5
         if: steps.schalter.outputs.los == 'ja'
@@ -63,12 +67,13 @@ jobs:
 
       - name: Abhaengigkeiten
         if: steps.schalter.outputs.los == 'ja'
-        run: pip install -q requests
+        run: pip install -q requests beautifulsoup4 lxml
 
       - name: Messen
         if: steps.schalter.outputs.los == 'ja'
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
           MINUTEN: ${{ inputs.minuten }}
           ERZWINGEN: ${{ inputs.erzwingen }}
         run: |
