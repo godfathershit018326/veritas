@@ -92,6 +92,18 @@ jobs:
             && echo "Nachttabelle geholt." || { echo "::error::Keine Nachttabelle."; exit 1; }
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_analysten.parquet --clobber > /dev/null 2>&1 \
             && echo "Analystenwerte geholt." || echo "Keine Analystenwerte."
+          tag=$(gh release list --repo "$DATEN_REPO" --limit 100 --json tagName,createdAt,isDraft \
+            --jq '[.[] | select(.tagName | startswith("fundament-roh-")) | select(.isDraft | not)] | sort_by(.createdAt) | last | .tagName // ""')
+          mkdir -p fundament
+          if [ -n "$tag" ]; then
+            jahr=$(date -u +%Y)
+            for j in $(seq $((jahr - 5)) "$jahr"); do
+              gh release download "$tag" --repo "$DATEN_REPO" --pattern "fundament_kennzahlen_${j}.parquet" --dir fundament --clobber > /dev/null 2>&1 || true
+            done
+            echo "Fundament: $(ls fundament | wc -l) Dateien."
+          else
+            echo "Kein Fundament-Release."
+          fi
 
       - name: Rechnen
         if: steps.neu.outputs.los == 'ja'
