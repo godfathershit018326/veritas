@@ -2,14 +2,11 @@ name: Quartalsmeldungen messen (Phase 0)
 run-name: Quartalsmeldungen messen
 
 on:
-  schedule:
-    - cron: "50 9 * * 1-5"
-    - cron: "50 19 * * 1-5"
   workflow_dispatch:
     inputs:
       minuten:
-        description: "Messdauer in Minuten"
-        default: "120"
+        description: "Messdauer in Minuten (leer heisst bis 9:40 oder 18:00 Uhr New York)"
+        default: ""
       erzwingen:
         description: "Trotz ausgeschaltetem Schalter messen (ja/nein)"
         default: "nein"
