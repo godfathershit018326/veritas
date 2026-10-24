@@ -77,7 +77,10 @@ jobs:
           MINUTEN: ${{ inputs.minuten }}
           ERZWINGEN: ${{ inputs.erzwingen }}
         run: |
-          if [ -n "$MINUTEN" ]; then m="$MINUTEN"; elif [ "$(TZ=America/New_York date +%H)" -lt 12 ]; then m=220; else m=110; fi
+          jetzt=$((10#$(TZ=America/New_York date +%H) * 60 + 10#$(TZ=America/New_York date +%M)))
+          if [ -n "$MINUTEN" ]; then m="$MINUTEN"; elif [ "$jetzt" -lt 720 ]; then m=$((580 - jetzt)); else m=$((1080 - jetzt)); fi
+          if [ "$m" -lt 10 ]; then m=10; fi
+          echo "Messdauer: $m Minuten."
           python -m innovation.quartalsmeldungen.messung --daten .daten --minuten "$m" $([ "$ERZWINGEN" = "ja" ] && echo --erzwingen)
           python -m innovation.quartalsmeldungen.messung --daten .daten --bericht > /dev/null
 
