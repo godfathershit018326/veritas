@@ -10,6 +10,9 @@ on:
       erzwingen:
         description: "Trotz ausgeschaltetem Schalter messen (ja/nein)"
         default: "nein"
+      probe:
+        description: "Probelauf Python-Leser und KI auf einem Messtag (YYYY-MM-DD), leer heisst normaler Lauf"
+        default: ""
 
 concurrency:
   group: quartalsmeldungen-messung
@@ -17,6 +20,7 @@ concurrency:
 
 permissions:
   contents: read
+  models: read
 
 env:
   DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
@@ -71,9 +75,14 @@ jobs:
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
           MINUTEN: ${{ inputs.minuten }}
+          PROBE: ${{ inputs.probe }}
           ERZWINGEN: ${{ inputs.erzwingen }}
         run: |
+          if [ -n "$PROBE" ]; then python innovation/quartalsmeldungen/live.py --daten .daten --probe "$PROBE"; exit 0; fi
           jetzt=$((10#$(TZ=America/New_York date +%H) * 60 + 10#$(TZ=America/New_York date +%M)))
           if [ -n "$MINUTEN" ]; then m="$MINUTEN"; elif [ "$jetzt" -lt 720 ]; then m=$((580 - jetzt)); else m=$((1080 - jetzt)); fi
           if [ "$m" -lt 10 ]; then m=10; fi
