@@ -20,7 +20,6 @@ concurrency:
 
 permissions:
   contents: read
-  models: read
 
 env:
   DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
@@ -77,7 +76,6 @@ jobs:
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
           CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          GITHUB_TOKEN: ${{ github.token }}
           MINUTEN: ${{ inputs.minuten }}
           PROBE: ${{ inputs.probe }}
           ERZWINGEN: ${{ inputs.erzwingen }}
