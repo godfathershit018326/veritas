@@ -94,6 +94,12 @@ jobs:
           TROCKEN: ${{ inputs.trocken }}
         run: python verkaufssignale.py --daten .daten --kurse scanner_kurse_3j.parquet $([ "$TROCKEN" = "ja" ] && echo --trocken)
 
+      - name: Schattendepot zum Schluss
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && inputs.trocken != 'ja'
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: python3 depot.py --abend --positionen positionen.json --staffel .daten/verkauf/staffel.json
+
       - name: Stand merken
         if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.neu.outputs.bau != '' && inputs.trocken != 'ja'
         env:
