@@ -26,8 +26,8 @@ jobs:
       - name: Zeitfenster pruefen
         id: fenster
         run: |
-          zeit=$(TZ=Europe/Vienna date +%H%M)
-          if (( 10#$zeit >= 1530 && 10#$zeit < 2200 )) && [ "$(TZ=America/New_York date +%u)" -le 5 ]; then
+          zeit=$(TZ=America/New_York date +%H%M)
+          if (( 10#$zeit >= 930 && 10#$zeit < 1600 )) && [ "$(TZ=America/New_York date +%u)" -le 5 ]; then
             echo "::notice::Handelszeit in New York: kein Lauf, damit nichts das laufende System belastet."
             echo "los=nein" >> "$GITHUB_OUTPUT"
           else

@@ -23,10 +23,10 @@ jobs:
       - name: Zeitfenster pruefen
         id: zeit
         run: |
-          STUNDE=$(TZ=Europe/Vienna date +%H)
+          STUNDE=$(TZ=America/New_York date +%H)
           echo "stunde=$STUNDE" >> "$GITHUB_OUTPUT"
       - name: Pruefen und melden
-        if: steps.zeit.outputs.stunde == '14' || github.event_name == 'workflow_dispatch'
+        if: steps.zeit.outputs.stunde == '08' || github.event_name == 'workflow_dispatch'
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           GITHUB_TOKEN: ${{ github.token }}
