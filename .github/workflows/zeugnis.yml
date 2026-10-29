@@ -6,6 +6,11 @@ on:
     workflows: ["Scanner-Daten bauen"]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      bericht:
+        description: "Monatsbericht erlauben (ja/nein)"
+        required: false
+        default: "ja"
 
 concurrency:
   group: zeugnis
@@ -71,7 +76,8 @@ jobs:
         if: steps.fenster.outputs.los == 'ja'
         env:
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
-        run: python zeugnis.py --daten .daten
+          BERICHT: ${{ github.event.inputs.bericht }}
+        run: python zeugnis.py --daten .daten $([ "$BERICHT" = "nein" ] && echo --ohne-bericht)
 
       - name: Ablegen
         if: steps.fenster.outputs.los == 'ja'
@@ -87,6 +93,7 @@ jobs:
             if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; exit 0; fi
             git fetch --quiet --depth=1 origin main
             git reset --hard --quiet FETCH_HEAD
+            mkdir -p app
             cp "$RUNNER_TEMP/zeugnis.json" app/zeugnis.json
           done
           echo "::error::Ablegen nach drei Versuchen fehlgeschlagen."
