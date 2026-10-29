@@ -77,7 +77,8 @@ jobs:
         env:
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
           BERICHT: ${{ github.event.inputs.bericht }}
-        run: python zeugnis.py --daten .daten $([ "$BERICHT" = "nein" ] && echo --ohne-bericht)
+          EREIGNIS: ${{ github.event_name }}
+        run: python zeugnis.py --daten .daten $([ "$BERICHT" = "nein" ] && echo --ohne-bericht) $([ "$EREIGNIS" = "workflow_run" ] && echo --nur-neu)
 
       - name: Ablegen
         if: steps.fenster.outputs.los == 'ja'
