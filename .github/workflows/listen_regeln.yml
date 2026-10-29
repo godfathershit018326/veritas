@@ -1,0 +1,111 @@
+name: Automatische Listen
+run-name: Automatische Listen
+
+on:
+  workflow_run:
+    workflows: ["Scanner-Daten bauen"]
+    types: [completed]
+  schedule:
+    - cron: "5 21,22 * * 6"
+  workflow_dispatch:
+    inputs:
+      anlass:
+        description: "samstag oder nacht"
+        required: true
+        default: "samstag"
+
+concurrency:
+  group: listen-regeln
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  lauf:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Anlass und Zeitfenster
+        id: fenster
+        env:
+          EREIGNIS: ${{ github.event_name }}
+          EINGABE: ${{ github.event.inputs.anlass }}
+        run: |
+          zeit=$(TZ=America/New_York date +%H%M)
+          if (( 10#$zeit >= 930 && 10#$zeit < 1600 )) && [ "$(TZ=America/New_York date +%u)" -le 5 ]; then
+            echo "::notice::Handelszeit in New York: kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          case "$EREIGNIS" in
+            workflow_run) anlass=nacht ;;
+            schedule)
+              if [ "$(TZ=Europe/Vienna date +%u%H)" != "623" ]; then
+                echo "Nicht 23 Uhr in Wien; kein Lauf."
+                echo "los=nein" >> "$GITHUB_OUTPUT"; exit 0
+              fi
+              anlass=samstag ;;
+            *) anlass="$EINGABE" ;;
+          esac
+          if [ "$anlass" != "samstag" ] && [ "$anlass" != "nacht" ]; then
+            echo "::error::Unbekannter Anlass."; exit 1
+          fi
+          echo "anlass=$anlass" >> "$GITHUB_OUTPUT"
+          echo "los=ja" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.fenster.outputs.los == 'ja'
+      - uses: ./.github/actions/entsperren
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - uses: actions/checkout@v4
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .daten
+          sparse-checkout: |
+            einstellungen
+            blacklist/
+            app/scanner
+
+      - uses: actions/setup-python@v5
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          python-version: "3.11"
+
+      - name: Füllen
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          ANLASS: ${{ steps.fenster.outputs.anlass }}
+        run: python listen_regeln.py --daten .daten --anlass "$ANLASS"
+
+      - name: Ablegen
+        if: steps.fenster.outputs.los == 'ja'
+        run: |
+          cd .daten
+          git config user.name "veritas-listen-regeln"
+          git config user.email "actions@users.noreply.github.com"
+          mkdir -p "$RUNNER_TEMP/neu"
+          git add -A -- einstellungen
+          if git diff --cached --quiet; then echo "Nichts abzulegen."; exit 0; fi
+          dateien=$(git diff --cached --name-only -- einstellungen)
+          for d in $dateien; do mkdir -p "$RUNNER_TEMP/neu/$(dirname "$d")"; cp "$d" "$RUNNER_TEMP/neu/$d"; done
+          for versuch in 1 2 3; do
+            git commit -q -m "Automatische Listen"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; exit 0; fi
+            git fetch --quiet --depth=1 origin main
+            git reset --hard --quiet FETCH_HEAD
+            for d in $dateien; do cp "$RUNNER_TEMP/neu/$d" "$d"; done
+            git add -A -- einstellungen
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; exit 0; fi
+          done
+          echo "::error::Ablegen nach drei Versuchen fehlgeschlagen."
+          exit 1
