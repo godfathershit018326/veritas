@@ -1,0 +1,42 @@
+name: Prüfung nach jedem Push
+run-name: Prüfung
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pruefung-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhängigkeiten
+        run: pip install -q -r requirements.txt pyflakes
+
+      - name: Gesamtprüfung
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: python gesamtpruefung.py --nur A,B,D,F,I --ohne-netz --leise --bericht
