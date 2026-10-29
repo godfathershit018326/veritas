@@ -41,7 +41,7 @@ jobs:
           else
             echo "da=ja" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.token.outputs.da == 'ja'
       - uses: ./.github/actions/entsperren
         if: steps.token.outputs.da == 'ja'
@@ -51,13 +51,13 @@ jobs:
         if: steps.token.outputs.da == 'ja'
         with:
           token: ${{ secrets.DATEN_TOKEN }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.token.outputs.da == 'ja'
         with:
           repository: ${{ env.DATEN_REPO }}
           token: ${{ secrets.DATEN_TOKEN }}
           path: daten
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.token.outputs.da == 'ja'
         with:
           python-version: "3.11"

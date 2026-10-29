@@ -35,7 +35,7 @@ jobs:
             echo "da=ja" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.token.outputs.da == 'ja'
         with:
           ref: main
@@ -44,14 +44,14 @@ jobs:
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.token.outputs.da == 'ja'
         with:
           repository: ${{ env.DATEN_REPO }}
           token: ${{ secrets.DATEN_TOKEN }}
           path: daten
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.token.outputs.da == 'ja'
         with:
           python-version: "3.11"

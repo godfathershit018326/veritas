@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/entsperren
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
@@ -86,7 +86,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scan_noetig.py
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.pruefung.outputs.noetig == 'ja'
         with:
           python-version: "3.11"

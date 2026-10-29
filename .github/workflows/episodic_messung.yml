@@ -37,7 +37,7 @@ jobs:
             echo "los=ja" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.fenster.outputs.los == 'ja'
       - uses: ./.github/actions/entsperren
         if: steps.fenster.outputs.los == 'ja'
@@ -48,7 +48,7 @@ jobs:
         with:
           token: ${{ secrets.DATEN_TOKEN }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.fenster.outputs.los == 'ja'
         with:
           repository: ${{ env.DATEN_REPO }}
@@ -57,7 +57,7 @@ jobs:
           sparse-checkout: |
             messungen/episodic
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.fenster.outputs.los == 'ja'
         with:
           python-version: "3.11"

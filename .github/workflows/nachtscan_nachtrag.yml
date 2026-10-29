@@ -1,0 +1,100 @@
+name: Nachtscan-Nachtrag
+run-name: Nachtscan-Nachtrag
+
+on:
+  workflow_run:
+    workflows: ["Auto-Wachstum (Auto-Liste)", "Automatische Listen"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: pattern-scanner
+  cancel-in-progress: false
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  nachtrag:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Zeitfenster
+        id: fenster
+        run: |
+          zeit=$(TZ=America/New_York date +%H%M)
+          if (( 10#$zeit >= 930 && 10#$zeit < 1600 )) && [ "$(TZ=America/New_York date +%u)" -le 5 ]; then
+            echo "::notice::Handelszeit in New York: kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.fenster.outputs.los == 'ja'
+      - uses: ./.github/actions/entsperren
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+
+      - uses: actions/setup-python@v6
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          python-version: "3.11"
+
+      - name: Abhängigkeiten
+        if: steps.fenster.outputs.los == 'ja'
+        run: pip install -q requests pandas numpy scipy openpyxl yfinance pyarrow
+
+      - name: Daten holen
+        if: steps.fenster.outputs.los == 'ja'
+        run: |
+          if [ -n "$DATEN_EINSTELLUNGEN" ] && [ -d "$DATEN_EINSTELLUNGEN/.git" ]; then
+            git -C "$DATEN_EINSTELLUNGEN" sparse-checkout add kursbibliothek 2>/dev/null || true
+          fi
+
+      - name: Nachtrag rechnen
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: python pattern_scanner.py finviz_3.csv --out kaufpunkte_aktuell.xlsx --nachtrag
+
+      - name: Ergebnis ablegen
+        if: steps.fenster.outputs.los == 'ja'
+        run: |
+          git config user.name "pattern-scanner"
+          git config user.email "actions@users.noreply.github.com"
+          DATEIEN="kaufpunkte_aktuell.xlsx alarm_kaufpunkte.json fokusliste.json volumenkurven.json zahlen_termine.json"
+          for f in $DATEIEN; do git add -A -- "$f" 2>/dev/null || true; done
+          if git diff --cached --quiet; then
+            echo "Nichts nachzutragen."
+            exit 0
+          fi
+          SICHERUNG=$(mktemp -d)
+          for f in $DATEIEN; do cp "$f" "$SICHERUNG/" 2>/dev/null || true; done
+          for versuch in 1 2 3; do
+            git fetch --quiet origin main
+            git reset --hard --quiet FETCH_HEAD
+            for f in $DATEIEN; do
+              [ -f "$SICHERUNG/$f" ] && cp "$SICHERUNG/$f" "$f"
+            done
+            for f in $DATEIEN; do git add -A -- "$f" 2>/dev/null || true; done
+            if git diff --cached --quiet; then
+              echo "Nach dem Abgleich keine Änderung mehr."
+              break
+            fi
+            git commit -q -m "Aktualisierung"
+            if git push --quiet origin main; then
+              echo "Nachtrag veröffentlicht (Versuch $versuch)."
+              break
+            fi
+            echo "Jemand war schneller (Versuch $versuch von 3) - noch einmal."
+          done
