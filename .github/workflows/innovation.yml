@@ -56,6 +56,7 @@ jobs:
             innovation
             konsens
             blacklist
+            einstellungen
 
       - name: Fällig?
         id: neu
@@ -136,8 +137,9 @@ jobs:
           git config user.name "veritas-innovation"
           git config user.email "actions@users.noreply.github.com"
           git add -A -- innovation
+          git add -A -- einstellungen/innovation_warnungen.json 2>/dev/null || true
           if git diff --cached --quiet; then echo "Nichts abzulegen."; exit 0; fi
-          git diff --cached --name-only --no-renames -z -- innovation > "$RUNNER_TEMP/eigene.lst"
+          git diff --cached --name-only --no-renames -z -- innovation einstellungen/innovation_warnungen.json > "$RUNNER_TEMP/eigene.lst"
           mkdir -p "$RUNNER_TEMP/stand"
           while IFS= read -r -d '' p; do
             if [ -e "$p" ]; then mkdir -p "$RUNNER_TEMP/stand/$(dirname "$p")"; cp -p "$p" "$RUNNER_TEMP/stand/$p"; fi
@@ -151,5 +153,6 @@ jobs:
               if [ -e "$RUNNER_TEMP/stand/$p" ]; then mkdir -p "$(dirname "$p")"; cp -p "$RUNNER_TEMP/stand/$p" "$p"; else rm -f -- "$p"; fi
             done < "$RUNNER_TEMP/eigene.lst"
             git add -A -- innovation
+            git add -A -- einstellungen/innovation_warnungen.json 2>/dev/null || true
             if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
           done
