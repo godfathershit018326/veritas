@@ -22,12 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/entsperren
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: ${{ env.DATEN_REPO }}
           token: ${{ secrets.DATEN_TOKEN }}
@@ -37,7 +37,7 @@ jobs:
             innovation/quartalsmeldungen/live
           sparse-checkout-cone-mode: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 

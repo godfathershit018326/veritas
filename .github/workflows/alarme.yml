@@ -42,7 +42,7 @@ jobs:
       contents: write
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/entsperren
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
@@ -50,7 +50,7 @@ jobs:
         with:
           token: ${{ secrets.DATEN_TOKEN }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -151,7 +151,7 @@ jobs:
 
       - name: Ergebnis sichern
         if: ${{ github.event.inputs.modus == 'terminvergleich' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: terminvergleich
           path: termine_vergleich.txt

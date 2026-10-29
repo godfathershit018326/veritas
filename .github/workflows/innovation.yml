@@ -42,12 +42,12 @@ jobs:
             echo "::error::hoechstens muss eine Zahl sein."; exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/entsperren
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: ${{ env.DATEN_REPO }}
           token: ${{ secrets.DATEN_TOKEN }}
@@ -75,7 +75,7 @@ jobs:
             echo "los=ja" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.neu.outputs.los == 'ja'
         with:
           python-version: "3.11"

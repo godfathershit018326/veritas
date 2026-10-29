@@ -34,11 +34,11 @@ jobs:
 
       - name: git-crypt aus dem Zwischenspeicher
         id: gitcrypt
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.local/bin/git-crypt
           key: git-crypt-${{ runner.os }}-${{ runner.arch }}-v1
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/entsperren
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
@@ -49,7 +49,7 @@ jobs:
         if: steps.gitcrypt.outputs.cache-hit != 'true'
         run: mkdir -p ~/.local/bin && cp "$(command -v git-crypt)" ~/.local/bin/git-crypt
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: ${{ env.DATEN_REPO }}
           token: ${{ secrets.DATEN_TOKEN }}
@@ -58,11 +58,11 @@ jobs:
             app/auftraege
             app/ergebnisse
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-dependency-glob: .github/workflows/app_auftrag.yml

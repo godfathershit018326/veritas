@@ -24,14 +24,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/entsperren
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
       - uses: ./.github/actions/einstellungen-holen
         with:
           token: ${{ secrets.DATEN_TOKEN }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Abhaengigkeiten
@@ -45,7 +45,7 @@ jobs:
         run: python messung_8k.py --lauf --hoechstens "${{ inputs.hoechstens }}" --modelle "${{ inputs.modelle }}"
       - name: Antworten und Bericht als Artefakt
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: messung-8k-${{ github.run_id }}
           path: messung_8k/

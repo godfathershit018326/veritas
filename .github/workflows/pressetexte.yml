@@ -54,20 +54,20 @@ jobs:
           if [ -z "$DATEN_TOKEN" ]; then echo "Secret DATEN_TOKEN fehlt."; da=nein; fi
           if [ -z "$SEC_USER_AGENT" ]; then echo "Secret SEC_USER_AGENT fehlt."; da=nein; fi
           echo "da=$da" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/entsperren
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
       - uses: ./.github/actions/einstellungen-holen
         with:
           token: ${{ secrets.DATEN_TOKEN }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.secrets.outputs.da == 'ja'
         with:
           repository: ${{ env.DATEN_REPO }}
           token: ${{ secrets.DATEN_TOKEN }}
           path: daten
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Abhaengigkeiten

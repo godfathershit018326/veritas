@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/entsperren
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
@@ -47,7 +47,7 @@ jobs:
             echo "los=nein" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.schalter.outputs.los == 'ja'
         with:
           repository: ${{ env.DATEN_REPO }}
@@ -60,7 +60,7 @@ jobs:
             einstellungen/kalender_vorlage.json
           sparse-checkout-cone-mode: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.schalter.outputs.los == 'ja'
         with:
           python-version: "3.11"

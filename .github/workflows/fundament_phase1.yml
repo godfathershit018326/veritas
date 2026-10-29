@@ -76,11 +76,11 @@ jobs:
       MODUS: ${{ inputs.modus || 'voll' }}
       HOECHSTENS: ${{ inputs.hoechstens || '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/entsperren
         with:
           schluessel: ${{ secrets.GIT_CRYPT_KEY }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Abhaengigkeiten
@@ -98,7 +98,7 @@ jobs:
           fi
       - name: Berichte als Artefakt
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: fundament-${{ env.MODUS }}-${{ github.run_id }}
           path: |

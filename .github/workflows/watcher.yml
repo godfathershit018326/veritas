@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.ref }}
       - uses: ./.github/actions/entsperren
@@ -29,7 +29,7 @@ jobs:
         with:
           token: ${{ secrets.DATEN_TOKEN }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -40,7 +40,7 @@ jobs:
         run: cp kaufpunkte_aktuell.xlsx kaufpunkte.xlsx
 
       - name: Zustand laden
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: watcher_state.json
           key: watcher-state-${{ github.run_id }}

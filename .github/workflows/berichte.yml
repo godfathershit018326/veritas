@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main
       - uses: ./.github/actions/entsperren
@@ -44,7 +44,7 @@ jobs:
           else
             python3 gapup_bericht.py --faellig
           fi
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.pruefung.outputs.noetig == 'ja'
         with:
           python-version: "3.11"
