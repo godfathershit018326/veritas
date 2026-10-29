@@ -54,9 +54,13 @@ jobs:
           repository: ${{ env.DATEN_REPO }}
           token: ${{ secrets.DATEN_TOKEN }}
           path: .app_daten
+          sparse-checkout-cone-mode: false
           sparse-checkout: |
-            app/auftraege
-            app/ergebnisse
+            /app/auftraege/
+            /app/ergebnisse/
+            /app/rollen.json
+            /app/scanner/stand.json
+            /gaeste/
 
       - uses: actions/setup-python@v6
         with:
