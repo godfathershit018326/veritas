@@ -39,4 +39,5 @@ jobs:
       - name: Gesamtprüfung
         env:
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          PYTHONPATH: ""
         run: python gesamtpruefung.py --nur A,B,D,F,I --ohne-netz --leise --bericht
