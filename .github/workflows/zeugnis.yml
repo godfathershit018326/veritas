@@ -1,0 +1,93 @@
+name: Zeugnis der Strategien
+run-name: Zeugnis
+
+on:
+  workflow_run:
+    workflows: ["Scanner-Daten bauen"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: zeugnis
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  lauf:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Zeitfenster
+        id: fenster
+        run: |
+          zeit=$(TZ=America/New_York date +%H%M)
+          if (( 10#$zeit >= 930 && 10#$zeit < 1600 )) && [ "$(TZ=America/New_York date +%u)" -le 5 ]; then
+            echo "::notice::Handelszeit in New York: kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.fenster.outputs.los == 'ja'
+      - uses: ./.github/actions/entsperren
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - uses: actions/checkout@v4
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .daten
+          sparse-checkout: |
+            app/zeugnis.json
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@v5
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          python-version: "3.11"
+
+      - name: Daten holen
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          pip install -q pandas pyarrow
+          for d in scanner_kurse_3j.parquet scanner_vergleich_3j.parquet; do
+            gh release download scanner-daten --repo "$DATEN_REPO" --pattern "$d" --clobber > /dev/null 2>&1 \
+              && echo "$d geholt." || echo "$d fehlt."
+          done
+
+      - name: Rechnen
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: python zeugnis.py --daten .daten
+
+      - name: Ablegen
+        if: steps.fenster.outputs.los == 'ja'
+        run: |
+          cd .daten
+          git config user.name "veritas-zeugnis"
+          git config user.email "actions@users.noreply.github.com"
+          cp app/zeugnis.json "$RUNNER_TEMP/zeugnis.json"
+          for versuch in 1 2 3; do
+            git add -A -- app/zeugnis.json
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; exit 0; fi
+            git commit -q -m "Zeugnis"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; exit 0; fi
+            git fetch --quiet --depth=1 origin main
+            git reset --hard --quiet FETCH_HEAD
+            cp "$RUNNER_TEMP/zeugnis.json" app/zeugnis.json
+          done
+          echo "::error::Ablegen nach drei Versuchen fehlgeschlagen."
+          exit 1
