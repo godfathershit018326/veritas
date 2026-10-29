@@ -1,0 +1,68 @@
+name: Kontingente
+run-name: Kontingente
+
+on:
+  workflow_run:
+    workflows: ["Quartalsmeldungen messen (Phase 0)", "Verkaufssignale (Verkaufen im Gewinn)", "Pattern-Scanner (Kaufpunkte)"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: kontingente
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  lauf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .daten
+          sparse-checkout: |
+            app/kontingente.json
+            innovation/quartalsmeldungen/live
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Messen
+        env:
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+        run: |
+          pip install -q requests
+          python kontingente.py --daten .daten
+
+      - name: Ablegen
+        run: |
+          cd .daten
+          git config user.name "veritas-kontingente"
+          git config user.email "actions@users.noreply.github.com"
+          cp app/kontingente.json "$RUNNER_TEMP/kontingente.json"
+          for versuch in 1 2 3; do
+            git add -A -- app/kontingente.json
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; exit 0; fi
+            git commit -q -m "Kontingente"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; exit 0; fi
+            git fetch --quiet --depth=1 origin main
+            git reset --hard --quiet FETCH_HEAD
+            mkdir -p app
+            cp "$RUNNER_TEMP/kontingente.json" app/kontingente.json
+          done
+          echo "::error::Ablegen nach drei Versuchen fehlgeschlagen."
+          exit 1
