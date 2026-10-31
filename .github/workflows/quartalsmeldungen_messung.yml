@@ -58,6 +58,7 @@ jobs:
             konsens
             app/kalender_scanner.json
             einstellungen/kalender_vorlage.json
+            einstellungen/zahlen_meldungen.json
           sparse-checkout-cone-mode: false
 
       - uses: actions/setup-python@v6
@@ -95,7 +96,7 @@ jobs:
           git config user.name "veritas-quartalsmeldungen"
           git config user.email "actions@users.noreply.github.com"
           for versuch in 1 2 3; do
-            git add -A -- innovation/quartalsmeldungen
+            git add -A -- innovation/quartalsmeldungen einstellungen/zahlen_meldungen.json
             if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
             git commit -q -m "Quartalsmeldungen: Messung Newswire gegen SEC"
             if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
