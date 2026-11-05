@@ -54,26 +54,27 @@ jobs:
             git reset --hard --quiet FETCH_HEAD
             python3 wochenputz.py
           done
-          if [ -n "$DATEN_EINSTELLUNGEN" ] && [ -f einzelaktien.csv ]; then
+          if [ -n "$DATEN_EINSTELLUNGEN" ]; then
             hier="$PWD"
             cd "$DATEN_EINSTELLUNGEN"
             git config user.name "veritas-wochenputz"
             git config user.email "actions@users.noreply.github.com"
             for versuch in 1 2 3; do
-              cp "$hier/einzelaktien.csv" einstellungen/einzelaktien.csv
-              git add -A -- einstellungen/einzelaktien.csv
+              if [ -f "$hier/einzelaktien.csv" ]; then cp "$hier/einzelaktien.csv" einstellungen/einzelaktien.csv; fi
+              (cd "$hier" && python3 wochenputz.py --daten "$DATEN_EINSTELLUNGEN/einstellungen")
+              git add -u -- einstellungen
               if git diff --cached --quiet; then
                 echo "Wochenputz: im Datenrepo nichts einzuchecken."
                 break
               fi
-              git commit -q -m "Wochenputz: Einzelüberwachung der alten Woche ausgetragen"
+              git commit -q -m "Wochenputz: Listen und Einzelüberwachung der alten Woche geleert"
               if git push --quiet origin HEAD:main; then
                 echo "Wochenputz im Datenrepo eingecheckt (Versuch $versuch)."
                 break
               fi
               git fetch --quiet --depth=1 origin main
               git reset --hard --quiet FETCH_HEAD
-              cp einstellungen/einzelaktien.csv "$hier/einzelaktien.csv"
+              if [ -f einstellungen/einzelaktien.csv ]; then cp einstellungen/einzelaktien.csv "$hier/einzelaktien.csv"; fi
               (cd "$hier" && python3 wochenputz.py > /dev/null)
             done
             cd "$hier"
