@@ -1,5 +1,5 @@
 name: Entsperren
-description: Installiert git-crypt und entsperrt den Checkout.
+description: Stellt git-crypt bereit (aus dem Zwischenspeicher, sonst frisch installiert) und entsperrt den Checkout.
 inputs:
   schluessel:
     description: Schluessel als Base64
@@ -7,6 +7,13 @@ inputs:
 runs:
   using: composite
   steps:
+    - id: bild
+      shell: bash
+      run: echo "name=${ImageOS:-unbekannt}" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v5
+      with:
+        path: ~/.cache/entsperren
+        key: entsperren-${{ runner.os }}-${{ runner.arch }}-${{ steps.bild.outputs.name }}-1
     - shell: bash
       env:
         SCHLUESSEL: ${{ inputs.schluessel }}
@@ -15,12 +22,32 @@ runs:
           echo "::error::Secret GIT_CRYPT_KEY fehlt; ohne Schluessel laeuft hier nichts."
           exit 1
         fi
-        if ! command -v git-crypt >/dev/null 2>&1; then
-          sudo apt-get install -y -qq git-crypt >/dev/null 2>&1 \
-            || { sudo apt-get update -qq >/dev/null && sudo apt-get install -y -qq git-crypt >/dev/null; }
+        ablage="$HOME/.cache/entsperren"
+        werkzeug=""
+        if command -v git-crypt >/dev/null 2>&1; then
+          werkzeug="$(command -v git-crypt)"
+        elif [ -x "$ablage/git-crypt" ] && "$ablage/git-crypt" --version >/dev/null 2>&1; then
+          werkzeug="$ablage/git-crypt"
+          echo "git-crypt aus dem Zwischenspeicher."
+        else
+          apt_ruhig() { sudo timeout 60 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 "$@" >/dev/null 2>&1; }
+          for versuch in 1 2 3; do
+            if apt_ruhig install -y -qq git-crypt; then break; fi
+            echo "Installation Versuch $versuch gescheitert."
+            apt_ruhig update -qq || true
+            sleep 5
+          done
+          if ! command -v git-crypt >/dev/null 2>&1; then
+            echo "::error::git-crypt liess sich nicht installieren und liegt nicht im Zwischenspeicher."
+            exit 1
+          fi
+          werkzeug="$(command -v git-crypt)"
+          mkdir -p "$ablage"
+          cp "$werkzeug" "$ablage/git-crypt"
+          echo "git-crypt frisch installiert und abgelegt."
         fi
         datei="$(mktemp)"
         printf '%s' "$SCHLUESSEL" | base64 -d > "$datei"
-        git-crypt unlock "$datei"
+        "$werkzeug" unlock "$datei"
         rm -f "$datei"
         echo "Entsperrt."
