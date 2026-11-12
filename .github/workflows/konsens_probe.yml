@@ -1,0 +1,26 @@
+name: Konsens-Probe
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: konsens-probe
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - name: Probe
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+        run: python3 konsens_probe.py
