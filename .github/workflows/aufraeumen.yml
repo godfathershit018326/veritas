@@ -48,6 +48,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
           REPO: ${{ github.repository }}
           SELBST: ${{ github.run_id }}
