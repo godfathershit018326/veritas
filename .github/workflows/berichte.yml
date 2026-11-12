@@ -62,22 +62,3 @@ jobs:
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
         run: python gapup_bericht.py --jetzt
 
-  earnings_vorboerse:
-    if: false && github.event_name == 'workflow_run'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-    steps:
-      - name: Zusatzlauf
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          zeit=$(TZ=America/New_York date +%H%M)
-          tag=$(TZ=America/New_York date +%u)
-          if [ "$tag" -le 5 ] && (( 10#$zeit >= 915 && 10#$zeit <= 924 )); then
-            gh workflow run vorabwerte.yml --repo "$GITHUB_REPOSITORY" --ref main -f modus=strom
-            echo "Zusatzlauf angestossen, $zeit New York."
-          else
-            echo "Nicht faellig, $zeit New York."
-          fi
