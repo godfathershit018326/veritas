@@ -73,6 +73,13 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python konsens_einfrieren.py --daten daten --modus "${{ inputs.modus }}" --hoechstens "${{ inputs.hoechstens }}"
+      - name: Ersatzquellen
+        if: steps.token.outputs.da == 'ja' && inputs.modus == 'schnappschuss'
+        continue-on-error: true
+        timeout-minutes: 30
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+        run: python konsens_ersatz.py --daten daten
       - name: Schnappschuss ins Datenrepo
         if: steps.token.outputs.da == 'ja'
         run: |
