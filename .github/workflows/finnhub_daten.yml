@@ -1,0 +1,51 @@
+name: Finnhub-Daten
+
+on:
+  workflow_run:
+    workflows: ["Konsens einfrieren"]
+    types: [completed]
+  workflow_dispatch: {}
+
+concurrency:
+  group: finnhub-daten
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  holen:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Daten holen
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          pip install -q pandas pyarrow
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --clobber
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern finnhub_daten.json --clobber \
+            || echo "Noch keine Finnhub-Datei; sie entsteht in diesem Lauf."
+      - name: Finnhub
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+        run: python finnhub_daten.py --tabelle scanner_tabelle.parquet --alt finnhub_daten.json --ziel finnhub_daten.json
+      - name: Ablegen
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          if [ -s finnhub_daten.json ]; then
+            gh release upload scanner-daten --repo "$DATEN_REPO" finnhub_daten.json --clobber
+            echo "Abgelegt."
+          fi
