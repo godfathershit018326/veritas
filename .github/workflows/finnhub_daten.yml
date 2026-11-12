@@ -40,7 +40,8 @@ jobs:
       - name: Finnhub
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
-        run: python finnhub_daten.py --tabelle scanner_tabelle.parquet --alt finnhub_daten.json --ziel finnhub_daten.json
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: python finnhub_daten.py --tabelle scanner_tabelle.parquet --alt finnhub_daten.json --ziel finnhub_daten.json --bericht
       - name: Ablegen
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}

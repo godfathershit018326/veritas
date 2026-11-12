@@ -99,6 +99,8 @@ jobs:
           else
             echo "Noch keine Analystendatei im Datenrepo; die Rotation beginnt von vorn."
           fi
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern finnhub_daten.json --clobber \
+            || echo "Noch keine Radar-Daten."
 
       - name: Daten holen 2
         if: steps.pruefung.outputs.noetig == 'ja' && steps.token.outputs.da == 'ja'
