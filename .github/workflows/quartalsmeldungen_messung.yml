@@ -70,15 +70,6 @@ jobs:
         if: steps.schalter.outputs.los == 'ja'
         run: pip install -q requests beautifulsoup4 lxml
 
-      - name: Zahlenkalender holen
-        if: steps.schalter.outputs.los == 'ja'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
-        run: |
-          gh release download scanner-daten --repo "$DATEN_REPO" --pattern finnhub_daten.json --clobber \
-            || echo "Kein Zahlenkalender; die Seite zeigt nur gelesene Mitteilungen."
-
       - name: Messen
         if: steps.schalter.outputs.los == 'ja'
         env:

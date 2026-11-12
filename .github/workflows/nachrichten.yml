@@ -46,6 +46,8 @@ jobs:
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --clobber
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern nachrichten.json --clobber \
             || echo "Noch keine Nachrichten-Datei; sie entsteht in diesem Lauf."
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern finnhub_daten.json --clobber \
+            || echo "Kein Zahlenkalender."
       - name: Lesen
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
