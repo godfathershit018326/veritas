@@ -159,6 +159,7 @@ jobs:
           GRENZE: ${{ github.event.inputs.grenze }}
           ANALYSTEN: ${{ github.event.inputs.analysten }}
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
         run: |
           case "${ANALYSTEN:-rotation}" in
             rotation|alle|aus) ;;
