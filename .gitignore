@@ -34,3 +34,7 @@ kursalarme.json
 .app_ausgabe/
 .app_daten/
 .scanner_vorlagen.json
+
+# Rueckfall der Nachttabelle und Arbeitsordner der Abendsignale (13.11.2026)
+.vornacht/
+.abend/
