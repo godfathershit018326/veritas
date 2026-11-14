@@ -1,0 +1,127 @@
+name: Verkaufssignale (Verkaufen im Gewinn)
+run-name: Verkaufssignale
+
+on:
+  workflow_run:
+    workflows: ["Scanner-Daten bauen"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      trocken:
+        description: "Nur ausgeben, nichts ablegen (ja/nein)"
+        default: "nein"
+
+concurrency:
+  group: verkaufssignale
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  lauf:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Zeitfenster pruefen
+        id: fenster
+        run: |
+          zeit=$(TZ=America/New_York date +%H%M)
+          if (( 10#$zeit >= 930 && 10#$zeit < 1600 )) && [ "$(TZ=America/New_York date +%u)" -le 5 ]; then
+            echo "::notice::Handelszeit in New York: kein Lauf, damit nichts das laufende System belastet."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.fenster.outputs.los == 'ja'
+      - uses: ./.github/actions/entsperren
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - uses: actions/checkout@v5
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .daten
+          sparse-checkout: |
+            verkauf
+            betrieb
+
+      - name: Positionen holen
+        if: steps.fenster.outputs.los == 'ja'
+        run: cp .daten/betrieb/positionen.json . && echo "Positionen geholt."
+
+      - name: Fällig?
+        id: neu
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          ANLASS: ${{ github.event_name }}
+        run: |
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_stand.json --clobber > /dev/null 2>&1 || true
+          bau=$(python3 -c "import json;print(json.load(open('scanner_stand.json')).get('gebaut_am',''))" 2>/dev/null || echo "")
+          alt=$(cat .daten/verkauf/letzter_bau.txt 2>/dev/null || echo "")
+          echo "bau=$bau" >> "$GITHUB_OUTPUT"
+          if [ "$ANLASS" = "workflow_run" ] && [ -n "$bau" ] && [ "$bau" = "$alt" ]; then
+            echo "Die Scanner-Tabelle ist seit dem letzten Lauf unverändert; kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v6
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja'
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja'
+        run: pip install -q requests pandas pyarrow
+
+      - name: Tageskurse holen
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_kurse_3j.parquet --clobber > /dev/null 2>&1 && echo "Kurse geholt." || echo "Kurse fehlen."
+
+      - name: Verkaufssignale pruefen
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja'
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          TROCKEN: ${{ inputs.trocken }}
+        run: python verkaufssignale.py --daten .daten --kurse scanner_kurse_3j.parquet $([ "$TROCKEN" = "ja" ] && echo --trocken)
+
+      - name: Schattendepot zum Schluss
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && inputs.trocken != 'ja'
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: python3 depot.py --abend --positionen positionen.json --staffel .daten/verkauf/staffel.json
+
+      - name: Stand merken
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja' && steps.neu.outputs.bau != '' && inputs.trocken != 'ja'
+        env:
+          BAU: ${{ steps.neu.outputs.bau }}
+        run: mkdir -p .daten/verkauf && printf '%s' "$BAU" > .daten/verkauf/letzter_bau.txt
+
+      - name: Ablegen
+        if: steps.fenster.outputs.los == 'ja' && steps.neu.outputs.los == 'ja'
+        run: |
+          cd .daten
+          git config user.name "veritas-verkaufssignale"
+          git config user.email "actions@users.noreply.github.com"
+          for versuch in 1 2 3; do
+            git add -A -- verkauf
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
+            git commit -q -m "Verkaufssignale: Staffel und Stand"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
+            git fetch --quiet --depth=1 origin main
+            git reset --quiet FETCH_HEAD
+          done

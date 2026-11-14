@@ -1,0 +1,138 @@
+name: Auto-Wachstum (Auto-Liste)
+run-name: Auto-Wachstum
+
+on:
+  workflow_run:
+    workflows: ["Scanner-Daten bauen"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: auto-wachstum
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  lauf:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Zeitfenster pruefen
+        id: fenster
+        run: |
+          zeit=$(TZ=America/New_York date +%H%M)
+          if (( 10#$zeit >= 930 && 10#$zeit < 1600 )) && [ "$(TZ=America/New_York date +%u)" -le 5 ]; then
+            echo "::notice::Handelszeit in New York: kein Lauf, damit nichts das laufende System belastet."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.fenster.outputs.los == 'ja'
+      - uses: ./.github/actions/entsperren
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - uses: actions/checkout@v5
+        if: steps.fenster.outputs.los == 'ja'
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .daten
+          sparse-checkout: |
+            auto_wachstum
+            blacklist
+            einstellungen
+            konsens
+
+      - name: Fällig?
+        id: neu
+        if: steps.fenster.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          ANLASS: ${{ github.event_name }}
+        run: |
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_stand.json --clobber > /dev/null 2>&1 || true
+          bau=$(python3 -c "import json;print(json.load(open('scanner_stand.json')).get('gebaut_am',''))" 2>/dev/null || echo "")
+          alt=$(cat .daten/auto_wachstum/letzter_bau.txt 2>/dev/null || echo "")
+          echo "bau=$bau" >> "$GITHUB_OUTPUT"
+          if [ "$ANLASS" = "workflow_run" ] && [ -n "$bau" ] && [ "$bau" = "$alt" ]; then
+            echo "Die Scanner-Tabelle ist seit dem letzten Lauf unverändert; kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v6
+        if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
+        run: pip install -q requests pandas pyarrow
+
+      - name: Daten holen
+        if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          for d in scanner_tabelle.parquet scanner_analysten.parquet scanner_kurse_3j.parquet; do
+            gh release download scanner-daten --repo "$DATEN_REPO" --pattern "$d" --clobber > /dev/null 2>&1 \
+              && echo "$d geholt." || echo "$d fehlt."
+          done
+          tag=$(gh release list --repo "$DATEN_REPO" --limit 100 --json tagName,createdAt,isDraft \
+            --jq '[.[] | select(.tagName | startswith("fundament-roh-")) | select(.isDraft | not)] | sort_by(.createdAt) | last | .tagName // ""')
+          mkdir -p fundament
+          if [ -n "$tag" ]; then
+            jahr=$(date -u +%Y)
+            for j in $(seq $((jahr - 5)) "$jahr"); do
+              gh release download "$tag" --repo "$DATEN_REPO" --pattern "fundament_kennzahlen_${j}.parquet" --dir fundament --clobber > /dev/null 2>&1 || true
+            done
+            gh release download "$tag" --repo "$DATEN_REPO" --pattern fundament_firmen.csv --dir fundament --clobber > /dev/null 2>&1 || true
+            echo "Fundament: $(ls fundament | wc -l) Dateien."
+          else
+            echo "Kein Fundament-Release."
+          fi
+
+      - name: Rechnen
+        if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python auto_wachstum.py --daten .daten --tabelle scanner_tabelle.parquet --analysten scanner_analysten.parquet --kurse scanner_kurse_3j.parquet --fundament fundament
+
+      - name: Bericht
+        if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
+        run: python auto_wachstum.py --daten .daten --bericht
+
+      - name: Stand merken
+        if: steps.neu.outputs.los == 'ja' && steps.neu.outputs.bau != ''
+        env:
+          BAU: ${{ steps.neu.outputs.bau }}
+        run: mkdir -p .daten/auto_wachstum && printf '%s' "$BAU" > .daten/auto_wachstum/letzter_bau.txt
+
+      - name: Ablegen
+        if: steps.neu.outputs.los == 'ja' && steps.fenster.outputs.los == 'ja'
+        run: |
+          cd .daten
+          git config user.name "veritas-auto-wachstum"
+          git config user.email "actions@users.noreply.github.com"
+          cp -r auto_wachstum "$RUNNER_TEMP/auto_wachstum"
+          for versuch in 1 2 3; do
+            git add -A -- auto_wachstum einstellungen/auto_wachstum.csv
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
+            git commit -q -m "Auto-Wachstum: Liste und Vorraum"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
+            git fetch --quiet --depth=1 origin main
+            git reset --hard --quiet FETCH_HEAD
+            rm -rf auto_wachstum && cp -r "$RUNNER_TEMP/auto_wachstum" auto_wachstum
+            cp auto_wachstum/auto_wachstum.csv einstellungen/auto_wachstum.csv
+          done

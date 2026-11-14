@@ -1,0 +1,43 @@
+name: Sicherung
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: sicherung
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sichern:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Spiegel holen und buendeln
+        run: |
+          git clone --quiet --mirror "https://github.com/${{ github.repository }}.git" spiegel.git
+          git -C spiegel.git count-objects -vH
+          echo "Refs: $(git -C spiegel.git for-each-ref | wc -l)"
+          git -C spiegel.git for-each-ref --format='%(refname)' | grep -v '^refs/pull/' || true
+          git -C spiegel.git bundle create ../sicherung.bundle --all
+          git -C spiegel.git bundle verify ../sicherung.bundle
+          sha256sum sicherung.bundle | tee sicherung.bundle.sha256
+          rm -rf spiegel.git
+
+      - name: Probe der Wiederherstellung
+        run: |
+          git clone --quiet --mirror sicherung.bundle probe.git
+          echo "Commits auf main: $(git -C probe.git rev-list --count main)"
+          echo "Zweige: $(git -C probe.git for-each-ref refs/heads | wc -l)"
+          rm -rf probe.git
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: sicherung
+          path: |
+            sicherung.bundle
+            sicherung.bundle.sha256
+          retention-days: 1
+          compression-level: 0

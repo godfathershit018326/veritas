@@ -1,0 +1,158 @@
+name: Innovationsmodell (Sammler und Noten)
+run-name: Innovationsmodell
+
+on:
+  workflow_run:
+    workflows: ["Scanner-Daten bauen"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      modus:
+        description: "taeglich oder nachladen (Wikipedia ab 2015 fuer noch nicht nachgeladene Firmen)"
+        required: false
+        default: "taeglich"
+      hoechstens:
+        description: "Hoechstens so viele Firmen beim Nachladen (leer heisst nach Einstellung)"
+        required: false
+        default: ""
+
+concurrency:
+  group: innovation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  lauf:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Eingaben pruefen
+        env:
+          MODUS: ${{ inputs.modus || 'taeglich' }}
+          HOECHSTENS: ${{ inputs.hoechstens }}
+        run: |
+          case "$MODUS" in taeglich|nachladen) ;; *) echo "::error::Unbekannter Modus."; exit 1;; esac
+          if [ -n "$HOECHSTENS" ] && ! printf '%s' "$HOECHSTENS" | grep -Eq '^[0-9]{1,5}$'; then
+            echo "::error::hoechstens muss eine Zahl sein."; exit 1
+          fi
+
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .daten
+          sparse-checkout: |
+            innovation
+            konsens
+            blacklist
+            einstellungen
+
+      - name: Fällig?
+        id: neu
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          ANLASS: ${{ github.event_name }}
+        run: |
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_stand.json --clobber > /dev/null 2>&1 || true
+          bau=$(python3 -c "import json;print(json.load(open('scanner_stand.json')).get('gebaut_am',''))" 2>/dev/null || echo "")
+          alt=$(cat .daten/innovation/letzter_bau.txt 2>/dev/null || echo "")
+          echo "bau=$bau" >> "$GITHUB_OUTPUT"
+          if [ "$ANLASS" = "workflow_run" ] && [ -n "$bau" ] && [ "$bau" = "$alt" ]; then
+            echo "Die Scanner-Tabelle ist seit dem letzten Lauf unverändert; kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v6
+        if: steps.neu.outputs.los == 'ja'
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        if: steps.neu.outputs.los == 'ja'
+        run: pip install -q requests pandas pyarrow
+
+      - name: Daten holen
+        if: steps.neu.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --clobber > /dev/null 2>&1 \
+            && echo "Nachttabelle geholt." || { echo "::error::Keine Nachttabelle."; exit 1; }
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_analysten.parquet --clobber > /dev/null 2>&1 \
+            && echo "Analystenwerte geholt." || echo "Keine Analystenwerte."
+          tag=$(gh release list --repo "$DATEN_REPO" --limit 100 --json tagName,createdAt,isDraft \
+            --jq '[.[] | select(.tagName | startswith("fundament-roh-")) | select(.isDraft | not)] | sort_by(.createdAt) | last | .tagName // ""')
+          mkdir -p fundament
+          if [ -n "$tag" ]; then
+            jahr=$(date -u +%Y)
+            for j in $(seq $((jahr - 5)) "$jahr"); do
+              gh release download "$tag" --repo "$DATEN_REPO" --pattern "fundament_kennzahlen_${j}.parquet" --dir fundament --clobber > /dev/null 2>&1 || true
+            done
+            echo "Fundament: $(ls fundament | wc -l) Dateien."
+          else
+            echo "Kein Fundament-Release."
+          fi
+
+      - name: Rechnen
+        if: steps.neu.outputs.los == 'ja'
+        env:
+          MODUS: ${{ inputs.modus || 'taeglich' }}
+          WIKIMEDIA_TOKEN: ${{ secrets.WIKIMEDIA_TOKEN }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python -m innovation.lauf --daten .daten --modus "$MODUS"
+
+      - name: Nachladen
+        if: steps.neu.outputs.los == 'ja' && (inputs.modus || 'taeglich') == 'taeglich'
+        env:
+          HOECHSTENS: ${{ inputs.hoechstens }}
+          WIKIMEDIA_TOKEN: ${{ secrets.WIKIMEDIA_TOKEN }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python -m innovation.lauf --daten .daten --modus nachladen ${HOECHSTENS:+--hoechstens "$HOECHSTENS"}
+
+      - name: Stand merken
+        if: steps.neu.outputs.los == 'ja' && steps.neu.outputs.bau != ''
+        env:
+          BAU: ${{ steps.neu.outputs.bau }}
+        run: mkdir -p .daten/innovation && printf '%s' "$BAU" > .daten/innovation/letzter_bau.txt
+
+      - name: Ablegen
+        if: steps.neu.outputs.los == 'ja'
+        run: |
+          cd .daten
+          git config user.name "veritas-innovation"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A -- innovation
+          git add -A -- einstellungen/innovation_warnungen.json 2>/dev/null || true
+          if git diff --cached --quiet; then echo "Nichts abzulegen."; exit 0; fi
+          git diff --cached --name-only --no-renames -z -- innovation einstellungen/innovation_warnungen.json > "$RUNNER_TEMP/eigene.lst"
+          mkdir -p "$RUNNER_TEMP/stand"
+          while IFS= read -r -d '' p; do
+            if [ -e "$p" ]; then mkdir -p "$RUNNER_TEMP/stand/$(dirname "$p")"; cp -p "$p" "$RUNNER_TEMP/stand/$p"; fi
+          done < "$RUNNER_TEMP/eigene.lst"
+          for versuch in 1 2 3; do
+            git commit -q -m "Innovationsmodell: Sammler und Noten"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
+            git fetch --quiet --depth=1 origin main
+            git reset --hard --quiet FETCH_HEAD
+            while IFS= read -r -d '' p; do
+              if [ -e "$RUNNER_TEMP/stand/$p" ]; then mkdir -p "$(dirname "$p")"; cp -p "$RUNNER_TEMP/stand/$p" "$p"; else rm -f -- "$p"; fi
+            done < "$RUNNER_TEMP/eigene.lst"
+            git add -A -- innovation
+            git add -A -- einstellungen/innovation_warnungen.json 2>/dev/null || true
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
+          done

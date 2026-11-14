@@ -1,0 +1,8 @@
+# Alles ist verschluesselt, ausser den Dateien unten.
+* filter=git-crypt diff=git-crypt
+.gitattributes !filter !diff
+.gitignore !filter !diff
+.github/** !filter !diff
+requirements.txt !filter !diff
+packages.txt !filter !diff
+README.md !filter !diff

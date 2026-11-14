@@ -1,0 +1,34 @@
+name: Betriebsampel vor Handelsbeginn
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: betriebsampel
+  cancel-in-progress: false
+
+jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+      - name: Zeitfenster pruefen
+        id: zeit
+        run: |
+          STUNDE=$(TZ=America/New_York date +%H)
+          echo "stunde=$STUNDE" >> "$GITHUB_OUTPUT"
+      - name: Pruefen und melden
+        if: steps.zeit.outputs.stunde == '08' || github.event_name == 'workflow_dispatch'
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: python betriebsampel.py --melden || true

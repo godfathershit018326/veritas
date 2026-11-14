@@ -1,0 +1,66 @@
+name: Einstellungen holen
+description: Holt Listen und Einstellungen aus dem privaten Datenrepo in den Arbeitsordner.
+inputs:
+  token:
+    description: Token mit Lesezugriff auf das Datenrepo
+    required: true
+  repository:
+    description: Datenrepo
+    required: false
+    default: ${{ github.repository_owner }}/veritas-daten
+runs:
+  using: composite
+  steps:
+    - if: inputs.token != ''
+      uses: actions/checkout@v5
+      with:
+        repository: ${{ inputs.repository }}
+        token: ${{ inputs.token }}
+        path: .daten
+        sparse-checkout: |
+          einstellungen
+          blacklist
+          betrieb
+    - shell: bash
+      env:
+        TOKEN_DA: ${{ inputs.token != '' }}
+        GH_TOKEN: ${{ inputs.token }}
+        DATEN_REPO_NAME: ${{ inputs.repository }}
+      run: |
+        echo "PYTHONPATH=$GITHUB_WORKSPACE/.github/maske${PYTHONPATH:+:$PYTHONPATH}" >> "$GITHUB_ENV"
+        if [ "$TOKEN_DA" != "true" ]; then
+          echo "Secret DATEN_TOKEN fehlt; Listen und Einstellungen aus dem Datenrepo fehlen."
+          exit 0
+        fi
+        n=0
+        for f in .daten/einstellungen/*; do
+          if [ -f "$f" ]; then cp "$f" .; n=$((n+1)); fi
+        done
+        echo "Einstellungen geholt: $n Datei(en)."
+        echo "DATEN_EINSTELLUNGEN=$PWD/.daten" >> "$GITHUB_ENV"
+        echo "DATEN_REPO=$DATEN_REPO_NAME" >> "$GITHUB_ENV"
+        b=0
+        for f in positionen.json trigger_logbuch.jsonl; do
+          if [ -f ".daten/betrieb/$f" ]; then cp ".daten/betrieb/$f" .; b=$((b+1)); fi
+        done
+        echo "Betriebsdateien geholt: $b von 2."
+        : > .nachtdateien_geholt
+        g=0
+        for f in ibd_ratings.json rs_universum.json exit_befunde.json volumenkurven.json; do
+          rm -f "$f"
+          for versuch in 1 2 3; do
+            if gh release download scanner-daten --repo "$DATEN_REPO_NAME" --pattern "$f" --clobber >/dev/null 2>&1 && [ -f "$f" ]; then
+              echo "$f $(sha256sum "$f" | cut -d' ' -f1)" >> .nachtdateien_geholt
+              g=$((g+1))
+              break
+            fi
+            sleep 5
+          done
+          if [ ! -f "$f" ] && [ -f ".daten/betrieb/start/$f" ]; then
+            cp ".daten/betrieb/start/$f" "$f"
+            echo "$f $(sha256sum "$f" | cut -d' ' -f1)" >> .nachtdateien_geholt
+            g=$((g+1))
+            echo "$f aus der Startablage."
+          fi
+        done
+        echo "Nachtdateien geholt: $g von 4."

@@ -1,0 +1,10 @@
+# Pakete fuer die Ablaeufe und die Pruefung (die alte Streamlit-App mit Streamlit und Plotly ist seit 13.11.2026 weg)
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+requests>=2.31
+openpyxl>=3.1
+yfinance>=0.2
+# Scanner (14.09.2026): Tabelle als Parquet, Ergebnis auch als OpenDocument-Tabelle.
+pyarrow>=14
+odfpy>=1.4

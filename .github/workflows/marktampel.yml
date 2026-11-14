@@ -1,0 +1,82 @@
+name: Marktampel
+
+on:
+  schedule:
+    - cron: "5 22 * * 1-5"
+    - cron: "10 10 * * 1-6"
+  workflow_dispatch:
+    inputs:
+      erzwingen:
+        description: "Auch rechnen, wenn die Ablage schon den letzten Schluss trägt (ja/nein)"
+        required: false
+        default: "nein"
+
+concurrency:
+  group: marktampel
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  rechnen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: pip install requests pandas numpy yfinance
+      - name: Selbsttest
+        run: python marktbreite.py --selbsttest
+      - name: Rechnen
+        env:
+          ERZWINGEN: ${{ github.event.inputs.erzwingen }}
+        run: |
+          if [ "$ERZWINGEN" = "ja" ]; then
+            python marktampel.py
+          else
+            python marktampel.py --nur-wenn-alt
+          fi
+      - name: Ins Repo
+        run: |
+          git config user.name "marktampel"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A -- marktampel.json
+          if git diff --cached --quiet; then
+            echo "Marktampel unverändert."
+            exit 0
+          fi
+          TAG=$(python -c "import json; print(json.load(open('marktampel.json'))['handelstag'])")
+          SICHERUNG=$(mktemp -d)
+          cp marktampel.json "$SICHERUNG/"
+          for versuch in 1 2 3; do
+            git fetch --quiet origin main
+            git reset --hard --quiet FETCH_HEAD
+            cp "$SICHERUNG/marktampel.json" marktampel.json
+            git add -A -- marktampel.json
+            if git diff --cached --quiet; then
+              echo "Nach dem Abgleich keine Änderung mehr."
+              break
+            fi
+            git commit -q -m "Aktualisierung"
+            if git push --quiet origin main; then
+              echo "Marktampel veröffentlicht (Versuch $versuch)."
+              break
+            fi
+            echo "Jemand war schneller (Versuch $versuch von 3), noch einmal."
+          done
+      - name: Daten für die Oberfläche
+        continue-on-error: true
+        run: python app_export.py ampel --quelle marktampel.yml
+      - uses: ./.github/actions/app-ablegen
+        continue-on-error: true
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}

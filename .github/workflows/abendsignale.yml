@@ -1,0 +1,83 @@
+name: Abendsignale
+
+on:
+  schedule:
+    - cron: "27 21-23 * * 1-5"
+    - cron: "27 0-8 * * 2-6"
+  workflow_dispatch:
+    inputs:
+      trocken:
+        description: "Nur rechnen und zaehlen, nichts melden (ja/nein)"
+        default: "nein"
+
+concurrency:
+  group: abendsignale
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  rechnen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+      - name: Pruefen
+        id: pruefung
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          TROCKEN: ${{ inputs.trocken || 'nein' }}
+        run: |
+          mkdir -p .abend
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_stand.json --dir .abend --clobber
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern fuehrer_abverkauf.json --dir .abend --clobber \
+            || echo "Noch kein Stand; er entsteht in diesem Lauf."
+          TAG=$(python3 -c "import json; print(json.load(open('.abend/scanner_stand.json')).get('handelstag') or '')")
+          ALT=$(python3 -c "import json, os; p='.abend/fuehrer_abverkauf.json'; print(json.load(open(p)).get('letzter_tag') or '' if os.path.exists(p) else '')")
+          if [ -n "$TAG" ] && [ "$TAG" = "$ALT" ] && [ "$TROCKEN" != "ja" ]; then
+            echo "Der Handelstag ist schon gerechnet."
+            echo "noetig=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "noetig=ja" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-python@v6
+        if: steps.pruefung.outputs.noetig == 'ja'
+        with:
+          python-version: "3.11"
+      - name: Daten holen
+        if: steps.pruefung.outputs.noetig == 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          pip install -q pandas pyarrow numpy requests
+          gh release download scanner-daten --repo "$DATEN_REPO" --dir .abend --clobber \
+            --pattern scanner_kurse_3j.parquet --pattern scanner_vergleich_3j.parquet --pattern scanner_tabelle.parquet
+      - name: Rechnen
+        if: steps.pruefung.outputs.noetig == 'ja'
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          TROCKEN: ${{ inputs.trocken || 'nein' }}
+        run: |
+          python fuehrer_abverkauf.py --kurse .abend/scanner_kurse_3j.parquet \
+            --vergleich .abend/scanner_vergleich_3j.parquet --tabelle .abend/scanner_tabelle.parquet \
+            --stand .abend/fuehrer_abverkauf.json $([ "$TROCKEN" = "ja" ] && echo --trocken)
+      - name: Ablegen
+        if: steps.pruefung.outputs.noetig == 'ja' && (inputs.trocken || 'nein') != 'ja'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          if [ -s .abend/fuehrer_abverkauf.json ]; then
+            gh release upload scanner-daten --repo "$DATEN_REPO" .abend/fuehrer_abverkauf.json --clobber
+            echo "Abgelegt."
+          fi

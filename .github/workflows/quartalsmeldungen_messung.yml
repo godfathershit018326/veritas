@@ -1,0 +1,105 @@
+name: Quartalsmeldungen messen (Phase 0)
+run-name: Quartalsmeldungen messen
+
+on:
+  workflow_dispatch:
+    inputs:
+      minuten:
+        description: "Messdauer in Minuten (leer heisst bis 9:40 oder 18:00 Uhr New York)"
+        default: ""
+      erzwingen:
+        description: "Trotz ausgeschaltetem Schalter messen (ja/nein)"
+        default: "nein"
+      probe:
+        description: "Probelauf Python-Leser und KI auf einem Messtag (YYYY-MM-DD), leer heisst normaler Lauf"
+        default: ""
+
+concurrency:
+  group: quartalsmeldungen-messung
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  messen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+
+      - name: Schalter pruefen
+        id: schalter
+        env:
+          ERZWINGEN: ${{ inputs.erzwingen }}
+        run: |
+          an=$(python3 -c "import innovation.einstellungen as E; print('ja' if E.QUARTALSMELDUNGEN_MESSEN else 'nein')")
+          if [ "$an" = "ja" ] || [ "$ERZWINGEN" = "ja" ]; then
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Schalter QUARTALSMELDUNGEN_MESSEN ist aus; kein Lauf."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.schalter.outputs.los == 'ja'
+        with:
+          repository: ${{ env.DATEN_REPO }}
+          token: ${{ secrets.DATEN_TOKEN }}
+          path: .daten
+          sparse-checkout: |
+            innovation/quartalsmeldungen
+            konsens
+            app/kalender_scanner.json
+            einstellungen/kalender_vorlage.json
+            einstellungen/zahlen_meldungen.json
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@v6
+        if: steps.schalter.outputs.los == 'ja'
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten
+        if: steps.schalter.outputs.los == 'ja'
+        run: pip install -q requests beautifulsoup4 lxml
+
+      - name: Messen
+        if: steps.schalter.outputs.los == 'ja'
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MINUTEN: ${{ inputs.minuten }}
+          PROBE: ${{ inputs.probe }}
+          ERZWINGEN: ${{ inputs.erzwingen }}
+        run: |
+          if [ -n "$PROBE" ]; then python innovation/quartalsmeldungen/live.py --daten .daten --probe "$PROBE"; exit 0; fi
+          jetzt=$((10#$(TZ=America/New_York date +%H) * 60 + 10#$(TZ=America/New_York date +%M)))
+          if [ -n "$MINUTEN" ]; then m="$MINUTEN"; elif [ "$jetzt" -lt 720 ]; then m=$((580 - jetzt)); else m=$((1080 - jetzt)); fi
+          if [ "$m" -lt 10 ]; then m=10; fi
+          echo "Messdauer: $m Minuten."
+          python -m innovation.quartalsmeldungen.messung --daten .daten --minuten "$m" $([ "$ERZWINGEN" = "ja" ] && echo --erzwingen)
+          python -m innovation.quartalsmeldungen.messung --daten .daten --bericht > /dev/null
+
+      - name: Ablegen
+        if: steps.schalter.outputs.los == 'ja'
+        run: |
+          cd .daten
+          git config user.name "veritas-quartalsmeldungen"
+          git config user.email "actions@users.noreply.github.com"
+          for versuch in 1 2 3; do
+            git add -A -- innovation/quartalsmeldungen einstellungen/zahlen_meldungen.json
+            if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
+            git commit -q -m "Quartalsmeldungen: Messung Newswire gegen SEC"
+            if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; break; fi
+            git fetch --quiet --depth=1 origin main
+            git reset --quiet FETCH_HEAD
+          done
