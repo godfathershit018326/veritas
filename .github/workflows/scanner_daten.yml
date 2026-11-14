@@ -101,6 +101,8 @@ jobs:
           fi
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern finnhub_daten.json --clobber \
             || echo "Noch keine Radar-Daten."
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern fuehrer_abverkauf.json --clobber \
+            || echo "Noch keine Abendsignale."
           mkdir -p .vornacht
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --dir .vornacht --clobber \
             || echo "Keine Tabelle der Vornacht."
