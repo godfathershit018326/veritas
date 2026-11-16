@@ -58,6 +58,7 @@ jobs:
           sparse-checkout: |
             /app/auftraege/
             /app/ergebnisse/
+            /app/profile/
             /app/rollen.json
             /app/scanner/stand.json
             /gaeste/
@@ -72,7 +73,7 @@ jobs:
           cache-dependency-glob: .github/workflows/app_auftrag.yml
 
       - name: Abhaengigkeiten
-        run: uv pip install --system -q requests pandas numpy scipy openpyxl yfinance pyarrow
+        run: uv pip install --system -q requests pandas numpy scipy openpyxl yfinance pyarrow beautifulsoup4 lxml
 
       - name: Daten holen
         continue-on-error: true
@@ -101,6 +102,10 @@ jobs:
           NUMMER: ${{ inputs.nummer }}
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_AI_TOKEN: ${{ secrets.CLOUDFLARE_AI_TOKEN }}
+          WIKIMEDIA_TOKEN: ${{ secrets.WIKIMEDIA_TOKEN }}
         run: python app_auftrag.py "$NUMMER" --daten .app_daten
 
       - name: Ergebnis ablegen
@@ -111,8 +116,10 @@ jobs:
           git config user.name "veritas-app-auftrag"
           git config user.email "actions@users.noreply.github.com"
           cp "app/ergebnisse/$NUMMER.json" "$RUNNER_TEMP/ergebnis.json"
+          mkdir -p "$RUNNER_TEMP/profile" app/profile
+          cp app/profile/*.json "$RUNNER_TEMP/profile/" 2>/dev/null || true
           for versuch in 1 2 3; do
-            git add -A -- app/auftraege app/ergebnisse
+            git add -A -- app/auftraege app/ergebnisse app/profile
             if git diff --cached --quiet; then
               echo "Nichts abzulegen."
               break
@@ -126,5 +133,7 @@ jobs:
             git reset --hard --quiet FETCH_HEAD
             mkdir -p app/ergebnisse
             cp "$RUNNER_TEMP/ergebnis.json" "app/ergebnisse/$NUMMER.json"
+            mkdir -p app/profile
+            cp "$RUNNER_TEMP/profile/"*.json app/profile/ 2>/dev/null || true
             rm -f "app/auftraege/$NUMMER.json"
           done
