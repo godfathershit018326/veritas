@@ -95,6 +95,7 @@ jobs:
           pip install -q pandas pyarrow
           if gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --clobber; then
             python gruppenfuehrer.py --daten .daten --tabelle scanner_tabelle.parquet
+            python darvas_liste.py --daten .daten --tabelle scanner_tabelle.parquet
           else
             echo "Nachttabelle fehlt; die Liste bleibt wie sie ist."
           fi
