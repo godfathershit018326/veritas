@@ -103,6 +103,8 @@ jobs:
             || echo "Noch keine Radar-Daten."
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern fuehrer_abverkauf.json --clobber \
             || echo "Noch keine Abendsignale."
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern squeeze.json --clobber \
+            || echo "Noch keine zweite Radar-Datei."
           mkdir -p .vornacht
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --dir .vornacht --clobber \
             || echo "Keine Tabelle der Vornacht."

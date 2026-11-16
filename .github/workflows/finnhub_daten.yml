@@ -37,11 +37,25 @@ jobs:
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --clobber
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern finnhub_daten.json --clobber \
             || echo "Noch keine Finnhub-Datei; sie entsteht in diesem Lauf."
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern squeeze.json --clobber \
+            || echo "Noch keine zweite Datei; sie entsteht in diesem Lauf."
       - name: Finnhub
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
         run: python finnhub_daten.py --tabelle scanner_tabelle.parquet --alt finnhub_daten.json --ziel finnhub_daten.json --bericht
+      - name: FINRA
+        if: always()
+        env:
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          pip install -q requests
+          python squeeze.py --tabelle scanner_tabelle.parquet --alt squeeze.json --ziel squeeze.json --bericht
+          if [ -s squeeze.json ]; then
+            gh release upload scanner-daten --repo "$DATEN_REPO" squeeze.json --clobber
+            echo "Zweite Datei abgelegt."
+          fi
       - name: Ablegen
         env:
           GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
@@ -50,3 +64,4 @@ jobs:
             gh release upload scanner-daten --repo "$DATEN_REPO" finnhub_daten.json --clobber
             echo "Abgelegt."
           fi
+
