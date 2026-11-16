@@ -74,6 +74,7 @@ jobs:
             einstellungen
             blacklist/
             app/scanner
+            zuordnung
 
       - uses: actions/setup-python@v6
         if: steps.fenster.outputs.los == 'ja'
@@ -86,6 +87,17 @@ jobs:
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
           ANLASS: ${{ steps.fenster.outputs.anlass }}
         run: python listen_regeln.py --daten .daten --anlass "$ANLASS"
+      - name: Zweite Liste
+        if: steps.fenster.outputs.los == 'ja' && steps.fenster.outputs.anlass == 'nacht'
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          pip install -q pandas pyarrow
+          if gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --clobber; then
+            python gruppenfuehrer.py --daten .daten --tabelle scanner_tabelle.parquet
+          else
+            echo "Nachttabelle fehlt; die Liste bleibt wie sie ist."
+          fi
 
       - name: Ablegen
         if: steps.fenster.outputs.los == 'ja'
