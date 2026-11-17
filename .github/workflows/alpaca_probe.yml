@@ -1,0 +1,36 @@
+name: Alpaca-Probe
+
+on:
+  push:
+    branches: [probe-alpaca]
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Daten
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          pip install -q pandas pyarrow requests
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --clobber
+      - name: Probe
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: |
+          python fonds.py --tabelle scanner_tabelle.parquet --alt keins.json --cusip fonds_cusip.json --ziel fonds_neu.json --zwingend
+          python -c "import json; d=json.load(open('fonds_neu.json')); s=d['spitze']; print('Spitze', len(s), 'neu Median', sorted(x['neu'] for x in s)[len(s)//2] if s else None, 'Fonds hoechstens', max((v[0] for v in d['aktien'].values()), default=0))"
