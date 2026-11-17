@@ -3,7 +3,7 @@ run-name: Tagesliste
 
 on:
   schedule:
-    - cron: "2 13,14,15,16,17,18,19 * * 1-5"
+    - cron: "2 12,13,14,15,16,17,18,19 * * 1-5"
   workflow_dispatch:
     inputs:
       minuten:
@@ -42,6 +42,9 @@ jobs:
         run: |
           pip install -q pandas pyarrow requests
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --clobber
+          for f in branchen_zuordnung.json branchen.json; do
+            gh api -H "Accept: application/vnd.github.raw" "repos/$DATEN_REPO/contents/app/$f" > "$f" || rm -f "$f"
+          done
           git -C .daten config user.name "veritas-tagesliste"
           git -C .daten config user.email "actions@users.noreply.github.com"
       - name: Lauf
@@ -50,5 +53,6 @@ jobs:
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           MINUTEN: ${{ github.event.inputs.minuten || '350' }}
         run: python tagesabgeher.py --laufen --bis-minuten "$MINUTEN"
