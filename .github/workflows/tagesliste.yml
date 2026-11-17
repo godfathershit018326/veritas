@@ -1,0 +1,54 @@
+name: Tagesliste
+run-name: Tagesliste
+
+on:
+  schedule:
+    - cron: "2 13,14,15,16,17,18,19 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      minuten:
+        description: "Minuten am Stueck"
+        required: false
+        default: "350"
+
+concurrency:
+  group: tagesliste
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DATEN_REPO: ${{ github.repository_owner }}/veritas-daten
+
+jobs:
+  lauf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/entsperren
+        with:
+          schluessel: ${{ secrets.GIT_CRYPT_KEY }}
+      - uses: ./.github/actions/einstellungen-holen
+        with:
+          token: ${{ secrets.DATEN_TOKEN }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Vorbereitung
+        env:
+          GH_TOKEN: ${{ secrets.DATEN_TOKEN }}
+        run: |
+          pip install -q pandas pyarrow requests
+          gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --clobber
+          git -C .daten config user.name "veritas-tagesliste"
+          git -C .daten config user.email "actions@users.noreply.github.com"
+      - name: Lauf
+        env:
+          ALPACA_KEY_ID: ${{ secrets.ALPACA_KEY_ID }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          DATEN_TOKEN: ${{ secrets.DATEN_TOKEN }}
+          MINUTEN: ${{ github.event.inputs.minuten || '350' }}
+        run: python tagesabgeher.py --laufen --bis-minuten "$MINUTEN"
