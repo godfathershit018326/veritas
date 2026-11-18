@@ -71,7 +71,8 @@ jobs:
           git config user.name "breakout-watcher"
           git config user.email "actions@users.noreply.github.com"
           git sparse-checkout add kursbibliothek 2>/dev/null || true
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             git fetch --quiet --depth=1 origin main
             git reset --hard --quiet FETCH_HEAD
             python "$hier/kursrekorder.py" --sichern "$hier/kursaufzeichnung.csv.gz" --repo "$PWD"
@@ -97,7 +98,8 @@ jobs:
           cp gruen_minuten.json "$GRUEN" 2>/dev/null || : > "$GRUEN"
           SCHLUSSNAH=/tmp/schlussnah_meine.json
           cp schlussnahe_gemeldet.json "$SCHLUSSNAH" 2>/dev/null || : > "$SCHLUSSNAH"
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             git fetch --quiet origin main
             git reset --hard --quiet FETCH_HEAD
             python ntfy_verlauf.py --vereinen "$SICHERUNG"

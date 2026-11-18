@@ -124,7 +124,8 @@ jobs:
           git config user.name "veritas-hoer-chart"
           git config user.email "actions@users.noreply.github.com"
           cp -r app/hoerchart "$RUNNER_TEMP/hoerchart"
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             git add -A -- app/hoerchart
             if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
             git commit -q -m "Hoer-Chart-Daten"

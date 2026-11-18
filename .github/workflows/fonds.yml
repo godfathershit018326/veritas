@@ -70,9 +70,10 @@ jobs:
           git add -- app/fonds.json
           if git diff --cached --quiet; then echo "Unveraendert."; exit 0; fi
           git commit -q -m "Fonds-Kaeufe"
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; exit 0; fi
             git pull --quiet --rebase origin main
           done
-          echo "::error::Ablegen nach drei Versuchen fehlgeschlagen."
+          echo "::error::Ablegen nach sechs Versuchen fehlgeschlagen."
           exit 1

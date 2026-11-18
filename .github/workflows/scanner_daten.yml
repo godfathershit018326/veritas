@@ -206,7 +206,8 @@ jobs:
           cd "$DATEN_EINSTELLUNGEN"
           git config user.name "veritas-scanner-daten"
           git config user.email "actions@users.noreply.github.com"
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             cp "$hier/episodic_kandidaten.csv" einstellungen/episodic_kandidaten.csv
             git add -A -- einstellungen/episodic_kandidaten.csv
             if [ -f "$hier/episodic_kurven.json" ]; then
@@ -282,7 +283,8 @@ jobs:
           cp scanner_stand.json basis_stufen.json "$SICHERUNG/"
           for f in lockup.json fuehrer_barometer.json; do if [ -f "$f" ]; then cp "$f" "$SICHERUNG/"; fi; done
           ERLEDIGT=nein
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             git fetch --quiet origin main
             git reset --hard --quiet FETCH_HEAD
             cp "$SICHERUNG/scanner_stand.json" scanner_stand.json

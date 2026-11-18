@@ -112,7 +112,8 @@ jobs:
           if git diff --cached --quiet; then echo "Nichts abzulegen."; exit 0; fi
           dateien=$(git diff --cached --name-only -- einstellungen)
           for d in $dateien; do mkdir -p "$RUNNER_TEMP/neu/$(dirname "$d")"; cp "$d" "$RUNNER_TEMP/neu/$d"; done
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             git commit -q -m "Automatische Listen"
             if git push --quiet origin HEAD:main; then echo "Abgelegt (Versuch $versuch)."; exit 0; fi
             git fetch --quiet --depth=1 origin main
@@ -121,5 +122,5 @@ jobs:
             git add -A -- einstellungen
             if git diff --cached --quiet; then echo "Nichts abzulegen."; exit 0; fi
           done
-          echo "::error::Ablegen nach drei Versuchen fehlgeschlagen."
+          echo "::error::Ablegen nach sechs Versuchen fehlgeschlagen."
           exit 1

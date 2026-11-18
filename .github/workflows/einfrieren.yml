@@ -92,7 +92,8 @@ jobs:
             exit 0
           fi
           git commit -q -m "Konsens-Schnappschuss $(date -u +%Y-%m-%d_%H%MZ) (${{ inputs.modus }})"
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             if git push --quiet origin main; then
               echo "Gesichert."
               exit 0

@@ -126,7 +126,8 @@ jobs:
           git config user.name "veritas-auto-wachstum"
           git config user.email "actions@users.noreply.github.com"
           cp -r auto_wachstum "$RUNNER_TEMP/auto_wachstum"
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             git add -A -- auto_wachstum einstellungen/auto_wachstum.csv
             if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
             git commit -q -m "Auto-Wachstum: Liste und Vorraum"

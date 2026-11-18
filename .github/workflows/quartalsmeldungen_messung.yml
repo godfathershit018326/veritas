@@ -95,7 +95,8 @@ jobs:
           cd .daten
           git config user.name "veritas-quartalsmeldungen"
           git config user.email "actions@users.noreply.github.com"
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             git add -A -- innovation/quartalsmeldungen einstellungen/zahlen_meldungen.json
             if git diff --cached --quiet; then echo "Nichts abzulegen."; break; fi
             git commit -q -m "Quartalsmeldungen: Messung Newswire gegen SEC"

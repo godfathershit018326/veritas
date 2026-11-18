@@ -101,7 +101,8 @@ jobs:
             exit 0
           fi
           git commit -q -m "Branchen-Zuordnung: eigene Liste aus dem einmaligen Abzug (Entscheidung 10)"
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             if git push -q; then
               echo "Abgelegt (Versuch $versuch)."
               exit 0

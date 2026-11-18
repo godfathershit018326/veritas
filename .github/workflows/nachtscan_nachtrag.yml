@@ -86,7 +86,8 @@ jobs:
           fi
           SICHERUNG=$(mktemp -d)
           for f in $DATEIEN; do cp "$f" "$SICHERUNG/" 2>/dev/null || true; done
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             git fetch --quiet origin main
             git reset --hard --quiet FETCH_HEAD
             for f in $DATEIEN; do

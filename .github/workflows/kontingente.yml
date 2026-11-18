@@ -54,7 +54,8 @@ jobs:
           git config user.name "veritas-kontingente"
           git config user.email "actions@users.noreply.github.com"
           cp app/kontingente.json "$RUNNER_TEMP/kontingente.json"
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             git add -A -- app/kontingente.json
             if git diff --cached --quiet; then echo "Nichts abzulegen."; exit 0; fi
             git commit -q -m "Kontingente"
@@ -64,5 +65,5 @@ jobs:
             mkdir -p app
             cp "$RUNNER_TEMP/kontingente.json" app/kontingente.json
           done
-          echo "::error::Ablegen nach drei Versuchen fehlgeschlagen."
+          echo "::error::Ablegen nach sechs Versuchen fehlgeschlagen."
           exit 1

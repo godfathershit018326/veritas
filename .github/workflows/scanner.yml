@@ -39,7 +39,8 @@ jobs:
           git config user.name "pattern-scanner"
           git config user.email "actions@users.noreply.github.com"
           PUTZ="kaufpunkte_aktuell.xlsx fokusliste.json melde_gedaechtnis.json alarm_kaufpunkte.json"
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             for f in $PUTZ; do git add -A -- "$f" 2>/dev/null || true; done
             if git diff --cached --quiet; then
               echo "Wochenputz: nichts einzuchecken."
@@ -59,7 +60,8 @@ jobs:
             cd "$DATEN_EINSTELLUNGEN"
             git config user.name "veritas-wochenputz"
             git config user.email "actions@users.noreply.github.com"
-            for versuch in 1 2 3; do
+            for versuch in 1 2 3 4 5 6; do
+              if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
               if [ -f "$hier/einzelaktien.csv" ]; then cp "$hier/einzelaktien.csv" einstellungen/einzelaktien.csv; fi
               (cd "$hier" && python3 wochenputz.py --daten "$DATEN_EINSTELLUNGEN/einstellungen")
               git add -u -- einstellungen
@@ -184,7 +186,8 @@ jobs:
             DATEIEN="kaufpunkte_aktuell.xlsx alarm_kaufpunkte.json sektor_radar.json ntfy_ids.json fokusliste.json shakeout_warteliste.json zahlen_termine.json ausgelassen.json sektor_rangliste.json abendbericht_gedaechtnis.json schlussnahe_gemeldet.json marktampel.json"
             SICHERUNG=$(mktemp -d)
             for f in $DATEIEN; do cp "$f" "$SICHERUNG/" 2>/dev/null || true; done
-            for versuch in 1 2 3; do
+            for versuch in 1 2 3 4 5 6; do
+              if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
               git fetch --quiet origin main
               git reset --hard --quiet FETCH_HEAD
               for f in $DATEIEN; do

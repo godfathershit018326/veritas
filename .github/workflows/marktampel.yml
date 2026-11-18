@@ -57,7 +57,8 @@ jobs:
           TAG=$(python -c "import json; print(json.load(open('marktampel.json'))['handelstag'])")
           SICHERUNG=$(mktemp -d)
           cp marktampel.json "$SICHERUNG/"
-          for versuch in 1 2 3; do
+          for versuch in 1 2 3 4 5 6; do
+            if [ "$versuch" -gt 1 ]; then sleep $((RANDOM % 9 + 2)); fi
             git fetch --quiet origin main
             git reset --hard --quiet FETCH_HEAD
             cp "$SICHERUNG/marktampel.json" marktampel.json
