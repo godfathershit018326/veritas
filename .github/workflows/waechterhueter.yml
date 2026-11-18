@@ -36,3 +36,14 @@ jobs:
             --repo "${{ github.repository }}" \
             -f dauerwache="${{ steps.pruefung.outputs.dauerwache }}"
           echo "Wache angestoßen mit ${{ steps.pruefung.outputs.dauerwache }} Minuten."
+
+      - name: Tagesliste
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/actions/workflows/tagesliste.yml/runs?per_page=5" > laeufe.json || echo '{}' > laeufe.json
+          python3 tagesliste_noetig.py < laeufe.json
+          if grep -q "^noetig=ja" "$GITHUB_OUTPUT"; then
+            gh workflow run tagesliste.yml --repo "${{ github.repository }}"
+          fi
