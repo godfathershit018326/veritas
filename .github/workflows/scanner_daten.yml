@@ -105,6 +105,8 @@ jobs:
             || echo "Noch keine Abendsignale."
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern squeeze.json --clobber \
             || echo "Noch keine zweite Radar-Datei."
+          gh api "repos/$DATEN_REPO/contents/app/fonds.json" -H "Accept: application/vnd.github.raw" > fonds.json \
+            || { rm -f fonds.json; echo "Noch keine Fonds-Daten."; }
           mkdir -p .vornacht
           gh release download scanner-daten --repo "$DATEN_REPO" --pattern scanner_tabelle.parquet --dir .vornacht --clobber \
             || echo "Keine Tabelle der Vornacht."
